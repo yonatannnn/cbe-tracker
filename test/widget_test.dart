@@ -1,30 +1,34 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Phase 0 smoke test: the app boots into a 4-tab shell and tabs switch,
+// preserving each branch via the router's IndexedStack.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:cbe_tracker/main.dart';
+import 'package:cbe_tracker/app/app.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('boots with 4 tabs and Home shown', (WidgetTester tester) async {
+    await tester.pumpWidget(const ProviderScope(child: CbeTrackerApp()));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Bottom navigation has all 4 destinations.
+    expect(find.text('Home'), findsWidgets);
+    expect(find.text('Add'), findsOneWidget);
+    expect(find.text('Reconcile'), findsOneWidget);
+    expect(find.text('Reports'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Home tab is the initial location (AppBar + body both read "Home").
+    expect(find.widgetWithText(AppBar, 'Home'), findsOneWidget);
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('switching to Reports tab shows Reports', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: CbeTrackerApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Reports'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(AppBar, 'Reports'), findsOneWidget);
   });
 }
