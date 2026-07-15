@@ -22,6 +22,8 @@ import '../../data/db/tables.dart';
 import '../../services/parse_pipeline.dart';
 import '../../services/service_providers.dart';
 import '../reconcile/reconcile_providers.dart';
+import '../shared/branch_chips.dart';
+import '../shared/manual_entry_fields.dart';
 
 /// Add tab (§8 Phase 4, FR-2). Placeholder for Phase 0.
 class AddScreen extends StatelessWidget {
@@ -52,23 +54,16 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
   bool _manualOpen = false;
   String? _duplicateDate;
 
-  // Manual-edit fields, pre-filled from the parse when there is one.
-  final _amountController = TextEditingController();
-  final _referenceController = TextEditingController();
+  // Manual-edit values, pre-filled from the parse when there is one.
+  int? _manualCents;
   TxType _manualType = TxType.credit;
+  String _manualReference = '';
   String? _amountError;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _pick());
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _referenceController.dispose();
-    super.dispose();
   }
 
   Future<void> _pick() async {
@@ -96,8 +91,8 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
   }
 
   void _prefillFrom(ParsedCbeMessage parsed) {
-    _amountController.text = centsToInput(parsed.amountCents);
-    _referenceController.text = parsed.reference ?? '';
+    _manualCents = parsed.amountCents;
+    _manualReference = parsed.reference ?? '';
     _manualType = parsed.type;
   }
 
@@ -116,12 +111,12 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
       );
     }
 
-    final cents = parseCentsInput(_amountController.text);
+    final cents = _manualCents;
     if (cents == null || cents == 0) {
       setState(() => _amountError = 'Enter an amount like 5,000.00');
       return null;
     }
-    final typed = _referenceController.text.trim();
+    final typed = _manualReference.trim();
     return (
       cents: cents,
       type: _manualType,
@@ -237,7 +232,7 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
         const SizedBox(height: 16),
         Text('Branch', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        _BranchChips(
+        BranchChips(
           selectedId: _selectedBranchId,
           onSelected: (id) => setState(() => _selectedBranchId = id),
           onDefaultResolved: (id) {
@@ -308,7 +303,7 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
         ] else ...[
           Text('Branch', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          _BranchChips(
+          BranchChips(
             selectedId: _selectedBranchId,
             onSelected: (id) => setState(() => _selectedBranchId = id),
             onDefaultResolved: (id) {
@@ -336,38 +331,17 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
   Widget _buildManualFields() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: _amountController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Amount (ETB)',
-              border: const OutlineInputBorder(),
-              errorText: _amountError,
-            ),
-          ),
-          const SizedBox(height: 12),
-          SegmentedButton<TxType>(
-            segments: const [
-              ButtonSegment(value: TxType.credit, label: Text('Credit')),
-              ButtonSegment(value: TxType.debit, label: Text('Debit')),
-            ],
-            selected: {_manualType},
-            onSelectionChanged: (s) => setState(() => _manualType = s.first),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _referenceController,
-            decoration: const InputDecoration(
-              labelText: 'Reference (optional)',
-              helperText: 'Left blank, a MANUAL- reference is generated',
-              border: OutlineInputBorder(),
-            ),
-            style: AppTextStyles.mono,
-          ),
-        ],
+      child: ManualEntryFields(
+        initialCents: _manualCents,
+        initialType: _manualType,
+        initialReference: _manualReference,
+        amountError: _amountError,
+        onAmountChanged: (cents) => setState(() {
+          _manualCents = cents;
+          _amountError = null;
+        }),
+        onTypeChanged: (type) => _manualType = type,
+        onReferenceChanged: (ref) => _manualReference = ref,
       ),
     );
   }
@@ -546,59 +520,6 @@ class _Thumbnail extends StatelessWidget {
           child: const Icon(Icons.broken_image_outlined),
         ),
       ),
-    );
-  }
-}
-
-/// 2-column grid of active branches, most recently used pre-selected.
-class _BranchChips extends ConsumerWidget {
-  const _BranchChips({
-    required this.selectedId,
-    required this.onSelected,
-    required this.onDefaultResolved,
-  });
-
-  final int? selectedId;
-  final ValueChanged<int> onSelected;
-  final ValueChanged<int> onDefaultResolved;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final branches = ref.watch(activeBranchesProvider).value ?? const <Branch>[];
-    final lastUsed = ref.watch(lastBranchIdProvider).value;
-
-    if (branches.isEmpty) {
-      return const Text('No branches yet — add one from the dashboard.');
-    }
-
-    // Pre-select the most recently used branch, else the first one.
-    if (selectedId == null) {
-      final preferred = branches.any((b) => b.id == lastUsed)
-          ? lastUsed!
-          : branches.first.id;
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => onDefaultResolved(preferred),
-      );
-    }
-
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: branches.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 3.2,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemBuilder: (context, i) {
-        final branch = branches[i];
-        return ChoiceChip(
-          label: Text(branch.name, overflow: TextOverflow.ellipsis),
-          selected: selectedId == branch.id,
-          onSelected: (_) => onSelected(branch.id),
-        );
-      },
     );
   }
 }

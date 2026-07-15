@@ -51,7 +51,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/add-bulk',
-        builder: (context, state) => const BulkAddPlaceholderScreen(),
+        builder: (context, state) => const BulkAddScreen(),
       ),
       GoRoute(
         path: '/branch/:id',
