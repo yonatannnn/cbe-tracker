@@ -11,6 +11,7 @@ import '../features/dashboard/dashboard_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/reconcile/reconcile_screen.dart';
 import '../features/reports/reports_screen.dart';
+import '../features/settings/settings_screen.dart';
 import 'nav_shell.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -59,6 +60,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => BranchDetailScreen(
           branchId: int.parse(state.pathParameters['id']!),
         ),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsScreen(),
       ),
       GoRoute(
         path: '/transaction/:id',

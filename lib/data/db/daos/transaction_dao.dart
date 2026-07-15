@@ -212,6 +212,22 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
     sms: row.readTableOrNull(smsTransactions),
   );
 
+  /// A branch's transactions for one local day, each with its SMS link —
+  /// the report's per-branch list and verification counts (§FR-6).
+  Future<List<TransactionWithSms>> transactionsForBranchDay({
+    required int branchId,
+    required DateTime dayStart,
+    required DateTime dayEnd,
+  }) async {
+    final rows = await _joinedWithSms(
+      (t) =>
+          t.branchId.equals(branchId) &
+          t.transactionDate.isBiggerOrEqualValue(dayStart) &
+          t.transactionDate.isSmallerThanValue(dayEnd),
+    ).get();
+    return rows.map(_mapJoined).toList(growable: false);
+  }
+
   /// Applies an edit (amount / type / reference / branch). Balance streams
   /// recompute themselves, including for a branch change (§FR-7).
   Future<int> updateTransaction(int id, TransactionsCompanion changes) =>

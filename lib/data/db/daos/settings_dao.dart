@@ -13,6 +13,7 @@ class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin 
 
   static const _lastBranchKey = 'last_branch_id';
   static const _smsStateKey = 'sms_permission_state';
+  static const _reminderKey = 'report_reminder_time';
 
   Future<String?> _get(String key) async {
     final row = await (select(
@@ -62,6 +63,21 @@ class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin 
 
   Future<void> setSmsPermissionState(SmsPermissionState state) =>
       _set(_smsStateKey, state.name);
+
+  /// The daily report reminder, as "HH:mm". Null = off.
+  ///
+  /// Absent means "never configured", which the caller treats as the 18:00
+  /// default (§FR-6); the literal string 'off' means the user turned it off.
+  Stream<String?> watchReminderTime() {
+    return (select(appSettings)..where((s) => s.key.equals(_reminderKey)))
+        .watchSingleOrNull()
+        .map((row) => row?.value);
+  }
+
+  Future<String?> getReminderTime() async => _get(_reminderKey);
+
+  Future<void> setReminderTime(String? value) =>
+      _set(_reminderKey, value ?? 'off');
 }
 
 /// Tri-state so "never asked" is distinguishable from granted/skipped.

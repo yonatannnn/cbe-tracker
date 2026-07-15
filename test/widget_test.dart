@@ -12,6 +12,8 @@ import 'package:cbe_tracker/data/db/database.dart';
 import 'package:cbe_tracker/data/db/database_provider.dart';
 import 'package:cbe_tracker/features/branch_detail/branch_detail_providers.dart';
 import 'package:cbe_tracker/features/reconcile/reconcile_providers.dart';
+import 'package:cbe_tracker/features/reports/reports_providers.dart';
+import 'package:cbe_tracker/services/report_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -54,8 +56,22 @@ void main() {
         branchTransactionsProvider(
           bole.id,
         ).overrideWithValue(const AsyncValue.data([])),
+        // Phase 8's Reports tab likewise.
+        dailyReportProvider.overrideWithValue(
+          AsyncValue.data(
+            DailyReport(
+              day: DateTime(2026, 7, 15),
+              branches: const [],
+              footer: const ReconciliationFooter(
+                personalCount: 0,
+                unresolvedCount: 0,
+              ),
+            ),
+          ),
+        ),
       ],
-      child: const CbeTrackerApp(),
+      // No notification plugin or database in widget tests.
+      child: const CbeTrackerApp(bootstrapReminder: false),
     );
   }
 

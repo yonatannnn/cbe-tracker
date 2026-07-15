@@ -7,7 +7,6 @@ import '../../core/money/etb_format.dart';
 import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../reconcile/reconcile_providers.dart';
-import '../settings/manage_branches_sheet.dart';
 
 /// Home tab — total balance, SMS warning, branch cards, FAB (§FR-8).
 class DashboardScreen extends ConsumerWidget {
@@ -23,8 +22,8 @@ class DashboardScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Manage branches',
-            onPressed: () => showManageBranchesSheet(context),
+            tooltip: 'Settings',
+            onPressed: () => context.push('/settings'),
           ),
         ],
       ),

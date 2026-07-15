@@ -69,6 +69,29 @@ class SmsDao extends DatabaseAccessor<AppDatabase> with _$SmsDaoMixin {
         .watch();
   }
 
+  /// Report footer counts for [day] (§FR-6): messages marked personal, and
+  /// messages still awaiting a screenshot.
+  Future<({int personal, int unresolved})> footerCountsForDay(
+    DateTime day,
+  ) async {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    final row = await customSelect(
+      'SELECT '
+      'COALESCE(SUM(CASE WHEN ignored = 1 THEN 1 ELSE 0 END), 0) AS personal, '
+      'COALESCE(SUM(CASE WHEN ignored = 0 '
+      'AND matched_transaction_id IS NULL THEN 1 ELSE 0 END), 0) '
+      'AS unresolved '
+      'FROM sms_transactions WHERE received_at >= ?1 AND received_at < ?2',
+      variables: [Variable<DateTime>(start), Variable<DateTime>(end)],
+      readsFrom: {smsTransactions},
+    ).getSingle();
+    return (
+      personal: row.read<int>('personal'),
+      unresolved: row.read<int>('unresolved'),
+    );
+  }
+
   /// Records a CBE SMS the parser couldn't read, for fixture harvesting.
   ///
   /// INSERT OR IGNORE against the (body, receivedAt) unique index: a re-sync

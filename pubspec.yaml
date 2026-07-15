@@ -48,6 +48,7 @@ dependencies:
   go_router: ^17.3.0
   decimal: ^3.2.4
   google_generative_ai: ^0.4.7
+  timezone: ^0.11.1
 
 dev_dependencies:
   flutter_test:
@@ -72,6 +73,20 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/fonts/DejaVu-LICENSE.txt
+
+  # Embedded so PDFs render identically everywhere. The pdf package's built-in
+  # Helvetica is WinAnsi-encoded and has no U+2212 MINUS SIGN — the exact
+  # character formatSignedCents emits on every debit. NotoSans lacks it too
+  # (verified); DejaVu has it.
+  fonts:
+    - family: DejaVuSans
+      fonts:
+        - asset: assets/fonts/DejaVuSans.ttf
+        - asset: assets/fonts/DejaVuSans-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:
