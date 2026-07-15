@@ -33,6 +33,20 @@ class DailySummary {
   final int txCount;
 }
 
+/// A transaction plus the CBE SMS that corroborates it, if any (§FR-7).
+///
+/// Fetched with a single LEFT JOIN rather than a lookup per row — a branch
+/// with a long history would otherwise fire one query per visible row.
+class TransactionWithSms {
+  const TransactionWithSms({required this.transaction, this.sms});
+
+  final Transaction transaction;
+  final SmsTransaction? sms;
+
+  /// True when a CBE SMS is linked: the check icon vs the muted one.
+  bool get isVerified => sms != null;
+}
+
 /// SMS reconciliation counts for a day (§FR-5 summary cards).
 class DayCounts {
   const DayCounts({required this.received, required this.matched});

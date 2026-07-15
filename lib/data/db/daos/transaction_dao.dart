@@ -8,7 +8,7 @@ part 'transaction_dao.g.dart';
 
 /// Transactions — the ONLY source of balances (§3). All money math is integer
 /// cents in SQL; there is no double arithmetic anywhere here.
-@DriftAccessor(tables: [Transactions, Branches])
+@DriftAccessor(tables: [Transactions, Branches, SmsTransactions])
 class TransactionDao extends DatabaseAccessor<AppDatabase>
     with _$TransactionDaoMixin {
   TransactionDao(super.db);
@@ -172,7 +172,65 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// One transaction with its corroborating SMS, if any.
+  Future<TransactionWithSms?> findWithSms(int id) async {
+    final rows = await _joinedWithSms(
+      (t) => t.id.equals(id),
+    ).get();
+    return rows.isEmpty ? null : _mapJoined(rows.first);
+  }
+
+  /// A branch's transactions, newest first, each with its SMS link (§FR-7).
+  ///
+  /// ONE query with a LEFT JOIN — the verification icon must not cost a lookup
+  /// per row.
+  Stream<List<TransactionWithSms>> watchBranchTransactionsWithSms(
+    int branchId,
+  ) {
+    return _joinedWithSms(
+      (t) => t.branchId.equals(branchId),
+    ).watch().map((rows) => rows.map(_mapJoined).toList(growable: false));
+  }
+
+  JoinedSelectStatement<HasResultSet, dynamic> _joinedWithSms(
+    Expression<bool> Function($TransactionsTable t) filter,
+  ) {
+    return (select(transactions)..where(filter)).join([
+        leftOuterJoin(
+          smsTransactions,
+          smsTransactions.matchedTransactionId.equalsExp(transactions.id),
+        ),
+      ])
+      ..orderBy([
+        OrderingTerm.desc(transactions.transactionDate),
+        OrderingTerm.desc(transactions.id),
+      ]);
+  }
+
+  TransactionWithSms _mapJoined(TypedResult row) => TransactionWithSms(
+    transaction: row.readTable(transactions),
+    sms: row.readTableOrNull(smsTransactions),
+  );
+
+  /// Applies an edit (amount / type / reference / branch). Balance streams
+  /// recompute themselves, including for a branch change (§FR-7).
+  Future<int> updateTransaction(int id, TransactionsCompanion changes) =>
+      (update(transactions)..where((t) => t.id.equals(id))).write(changes);
+
   /// Deletes a transaction; balance streams recompute automatically (§FR-7).
-  Future<int> deleteTransaction(int id) =>
-      (delete(transactions)..where((t) => t.id.equals(id))).go();
+  ///
+  /// Any SMS linked to it is unlinked first, which does two jobs: the message
+  /// returns to the unmatched list so the payment isn't quietly forgotten
+  /// (§FR-5), and — since `matchedTransactionId` is a FK with no ON DELETE —
+  /// the delete would otherwise be REJECTED outright by the foreign key.
+  Future<int> deleteTransaction(int id) {
+    return transaction(() async {
+      await (update(smsTransactions)
+            ..where((s) => s.matchedTransactionId.equals(id)))
+          .write(const SmsTransactionsCompanion(
+            matchedTransactionId: Value<int?>(null),
+          ));
+      return (delete(transactions)..where((t) => t.id.equals(id))).go();
+    });
+  }
 }

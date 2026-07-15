@@ -10,6 +10,7 @@
 import 'package:cbe_tracker/app/app.dart';
 import 'package:cbe_tracker/data/db/database.dart';
 import 'package:cbe_tracker/data/db/database_provider.dart';
+import 'package:cbe_tracker/features/branch_detail/branch_detail_providers.dart';
 import 'package:cbe_tracker/features/reconcile/reconcile_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,6 +49,11 @@ void main() {
         branchTodayCountProvider(
           bole.id,
         ).overrideWithValue(AsyncValue.data(branchTodayCount)),
+        // Phase 7's branch detail is a real screen now, so its stream needs
+        // stubbing too or tapping through hits the database.
+        branchTransactionsProvider(
+          bole.id,
+        ).overrideWithValue(const AsyncValue.data([])),
       ],
       child: const CbeTrackerApp(),
     );
@@ -186,7 +192,11 @@ void main() {
       await tester.tap(find.text('Bole'));
       await tester.pumpAndSettle();
 
-      expect(find.widgetWithText(AppBar, 'Branch'), findsOneWidget);
+      // The real screen titles itself with the branch name (Phase 7 replaced
+      // the placeholder), and shows the empty state for a branch with no
+      // transactions.
+      expect(find.widgetWithText(AppBar, 'Bole'), findsOneWidget);
+      expect(find.text('No transactions yet'), findsOneWidget);
     });
   });
 }

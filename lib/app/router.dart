@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../data/db/database_provider.dart';
 import '../features/add_single/add_single_screen.dart';
 import '../features/branch_detail/branch_detail_screen.dart';
+import '../features/branch_detail/transaction_detail_screen.dart';
 import '../features/bulk_add/bulk_add_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
@@ -55,8 +56,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/branch/:id',
-        builder: (context, state) => BranchDetailPlaceholderScreen(
+        builder: (context, state) => BranchDetailScreen(
           branchId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
+      GoRoute(
+        path: '/transaction/:id',
+        builder: (context, state) => TransactionDetailScreen(
+          transactionId: int.parse(state.pathParameters['id']!),
         ),
       ),
       StatefulShellRoute.indexedStack(

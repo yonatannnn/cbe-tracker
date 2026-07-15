@@ -6,6 +6,7 @@ part of 'transaction_dao.dart';
 mixin _$TransactionDaoMixin on DatabaseAccessor<AppDatabase> {
   $BranchesTable get branches => attachedDatabase.branches;
   $TransactionsTable get transactions => attachedDatabase.transactions;
+  $SmsTransactionsTable get smsTransactions => attachedDatabase.smsTransactions;
   TransactionDaoManager get managers => TransactionDaoManager(this);
 }
 
@@ -16,4 +17,9 @@ class TransactionDaoManager {
       $$BranchesTableTableManager(_db.attachedDatabase, _db.branches);
   $$TransactionsTableTableManager get transactions =>
       $$TransactionsTableTableManager(_db.attachedDatabase, _db.transactions);
+  $$SmsTransactionsTableTableManager get smsTransactions =>
+      $$SmsTransactionsTableTableManager(
+        _db.attachedDatabase,
+        _db.smsTransactions,
+      );
 }
