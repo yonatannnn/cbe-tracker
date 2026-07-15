@@ -6,6 +6,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 
 import '../../core/parser/cbe_parser.dart'; // TxType — used by generated part
 import 'daos/branch_dao.dart';
+import 'daos/settings_dao.dart';
 import 'daos/sms_dao.dart';
 import 'daos/transaction_dao.dart';
 import 'tables.dart';
@@ -54,8 +55,8 @@ class BranchHasTransactionsException implements Exception {
 }
 
 @DriftDatabase(
-  tables: [Branches, Transactions, SmsTransactions],
-  daos: [BranchDao, TransactionDao, SmsDao],
+  tables: [Branches, Transactions, SmsTransactions, AppSettings],
+  daos: [BranchDao, TransactionDao, SmsDao, SettingsDao],
 )
 class AppDatabase extends _$AppDatabase {
   /// Production database, opened on disk via drift_flutter.
@@ -65,11 +66,16 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      // v2 adds the key-value settings table (last-used branch). Existing
+      // installs keep their branches and transactions.
+      if (from < 2) await m.createTable(appSettings);
+    },
     beforeOpen: (details) async {
       // Enforce referential integrity (branchId / matchedTransactionId FKs).
       await customStatement('PRAGMA foreign_keys = ON');

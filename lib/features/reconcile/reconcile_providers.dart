@@ -10,3 +10,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final unmatchedSmsCountProvider = StreamProvider<int>(
   (ref) => Stream<int>.value(0),
 );
+
+/// Whether a given FT reference has a matching CBE SMS in the shadow ledger.
+///
+/// STUBBED to null (= "unknown, not checked") until Phase 6 implements SMS
+/// reading. The confirm screen hides its verification line while this is null.
+final smsVerifiedProvider = Provider.family<bool?, String?>(
+  (ref, reference) => null,
+);

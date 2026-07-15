@@ -196,6 +196,42 @@ final fixtureNoKeyword = CbeFixture.throws(
 /// 12. Empty string → throws.
 final fixtureEmpty = CbeFixture.throws(name: '12: empty string', raw: '');
 
+// ── Real CBE app receipts ──────────────────────────────────────────────────
+//
+// Transcribed from an ACTUAL screenshot read by ML Kit on-device (names and
+// account digits anonymized). This is the "Transaction Summary" receipt the
+// CBE mobile app shows after a transfer — a completely different shape from
+// the SMS format §4 describes, and the format the user actually screenshots.
+//
+// Landmines this fixture pins:
+//  * the amount comes BEFORE the keyword ("ETB 1.00 has been debited");
+//  * "Total Amount Debited: ETB1.61" contains the keyword "Debited" and sits
+//    CLOSER to 1.61 than the real amount does to its keyword — the parser must
+//    still choose 1.00;
+//  * the fee lines add three more decoy amounts;
+//  * the date reads "on Jul 15, 2026 11:45 AM", not "on 15/07/2026 at 11:45";
+//  * "ETB-8402" is an account id, not an amount.
+
+/// 13. Real MB Transfer debit receipt.
+final fixtureRealReceiptDebit = CbeFixture.value(
+  name: '13: real app receipt, debit with fees',
+  raw:
+      'Thank you Success Transaction Completed Successfully! '
+      'Transaction Summary '
+      'ETB 1.00 has been debited from ABEBE KEBEDE TESFAYE ETB-8402 for '
+      'ALMAZ TESFA GIRMA ETB-3487 on Jul 15, 2026 11:45 AM with transaction '
+      'ID: FT26196FZHT2. Reason: MB Transfer '
+      'Total Amount Debited: ETB1.61 with Service Charge of ETB0.50, VAT '
+      '(15%) of ETB0.08 and Disaster Recovery (5%) of ETB0.03. '
+      'Commercial Bank of Ethiopia The bank you can always rely on!',
+  type: TxType.debit,
+  // The transfer itself — NOT the 1.61 fee-inclusive total.
+  amountCents: 100,
+  reference: 'FT26196FZHT2',
+  date: DateTime(2026, 7, 15, 11, 45),
+  confidence: Confidence.high,
+);
+
 /// Fixtures 1–5.
 final cleanFixtures = <CbeFixture>[
   fixtureCreditClean,
@@ -216,5 +252,12 @@ final edgeFixtures = <CbeFixture>[
   fixtureEmpty,
 ];
 
+/// Fixtures transcribed from real screenshots.
+final realFixtures = <CbeFixture>[fixtureRealReceiptDebit];
+
 /// All fixtures, in numbered order.
-final allFixtures = <CbeFixture>[...cleanFixtures, ...edgeFixtures];
+final allFixtures = <CbeFixture>[
+  ...cleanFixtures,
+  ...edgeFixtures,
+  ...realFixtures,
+];

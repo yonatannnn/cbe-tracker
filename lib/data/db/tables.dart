@@ -40,6 +40,17 @@ class Transactions extends Table {
       dateTime().withDefault(currentDateAndTime)();
 }
 
+/// Tiny key-value store for app preferences (e.g. the most recently used
+/// branch). Kept in SQLite so we don't pull in a package beyond §5.
+@DataClassName('AppSetting')
+class AppSettings extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {key};
+}
+
 /// Shadow ledger from CBE SMS — NEVER affects balances (§3, §FR-4).
 class SmsTransactions extends Table {
   IntColumn get id => integer().autoIncrement()();

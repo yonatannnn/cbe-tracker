@@ -47,7 +47,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/add-single',
-        builder: (context, state) => const AddSinglePlaceholderScreen(),
+        builder: (context, state) => const AddSingleScreen(),
       ),
       GoRoute(
         path: '/add-bulk',

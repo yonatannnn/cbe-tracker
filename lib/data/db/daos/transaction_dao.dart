@@ -22,6 +22,14 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
     return row == null ? InsertResult.duplicate : InsertResult.inserted;
   }
 
+  /// Looks up an existing transaction by its FT reference — used to show
+  /// "Already recorded on `<date>`" when a duplicate is rejected (§FR-2).
+  Future<Transaction?> findByReference(String reference) =>
+      (select(transactions)
+            ..where((t) => t.reference.equals(reference))
+            ..limit(1))
+          .getSingleOrNull();
+
   /// Commits every row in ONE transaction. Any failure — including an
   /// unexpected duplicate reference — rolls back the WHOLE batch.
   ///

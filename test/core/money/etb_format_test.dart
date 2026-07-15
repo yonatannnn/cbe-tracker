@@ -50,4 +50,29 @@ void main() {
       expect(formatSignedCents(0), 'ETB 0.00');
     });
   });
+
+  group('parseCentsInput', () {
+    test('accepts grouped, plain, and short-fraction input', () {
+      expect(parseCentsInput('5,000.00'), 500000);
+      expect(parseCentsInput('5000'), 500000);
+      expect(parseCentsInput('850.5'), 85050);
+      expect(parseCentsInput('0.05'), 5);
+      expect(parseCentsInput('1,250,000.00'), 125000000);
+      expect(parseCentsInput(' 5 000.00 '), 500000);
+    });
+
+    test('rejects junk rather than guessing', () {
+      expect(parseCentsInput(''), isNull);
+      expect(parseCentsInput('abc'), isNull);
+      expect(parseCentsInput('5.000'), isNull); // 3 fraction digits
+      expect(parseCentsInput('-5.00'), isNull);
+      expect(parseCentsInput('5..0'), isNull);
+    });
+
+    test('round-trips through centsToInput', () {
+      for (final cents in [0, 5, 85050, 500000, 125000000]) {
+        expect(parseCentsInput(centsToInput(cents)), cents);
+      }
+    });
+  });
 }

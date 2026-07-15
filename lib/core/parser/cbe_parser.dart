@@ -5,6 +5,8 @@
 ///
 library;
 
+import 'amount_adjacency.dart';
+
 /// Transaction direction.
 enum TxType { credit, debit }
 
@@ -50,29 +52,75 @@ class ParseException implements Exception {
   String toString() => 'ParseException: $message';
 }
 
-// ETB (also tolerate "Br") immediately preceding an amount like 5,000.00.
-final _amountRe = RegExp(
-  r'(?:ETB|Br)\s*([\d,]+\.\d{2})',
-  caseSensitive: false,
-);
-
-// Keyword detection is whitespace-tolerant so OCR line breaks that split a
-// word ("Cred\nited") still match once whitespace is collapsed to spaces.
-final _creditRe = RegExp(
-  r'c\s*r\s*e\s*d\s*i\s*t\s*e\s*d',
-  caseSensitive: false,
-);
-final _debitRe = RegExp(r'd\s*e\s*b\s*i\s*t\s*e\s*d', caseSensitive: false);
+// Amount location and credited/debited keywords live in amount_adjacency.dart
+// so the AI gate applies the identical rule.
 
 // CBE FT references are exactly FT + 10 alphanumerics. The receipt URL appends
 // the account suffix (…12341234), so we bound to 10 to avoid swallowing it.
 final _refRe = RegExp(r'FT\w{10}');
 
-// "on <dd/MM/yyyy> at <HH:mm>".
-final _dateRe = RegExp(
-  r'on\s+(\d{2})/(\d{2})/(\d{4})\s+at\s+(\d{2}):(\d{2})',
+// CBE writes dates two ways. Both are supported; whichever matches first wins.
+
+// SMS style: "on 14/07/2026 at 10:42".
+final _slashDateRe = RegExp(
+  r'on\s+(\d{1,2})/(\d{1,2})/(\d{4})\s+at\s+(\d{1,2}):(\d{2})',
   caseSensitive: false,
 );
+
+// App receipt style: "on Jul 15, 2026 11:45 AM".
+final _monthNameDateRe = RegExp(
+  r'\b([A-Za-z]{3})[a-z]*\s+(\d{1,2}),\s*(\d{4})\s+(\d{1,2}):(\d{2})\s*([AP]M)',
+  caseSensitive: false,
+);
+
+const Map<String, int> _months = {
+  'jan': 1,
+  'feb': 2,
+  'mar': 3,
+  'apr': 4,
+  'may': 5,
+  'jun': 6,
+  'jul': 7,
+  'aug': 8,
+  'sep': 9,
+  'oct': 10,
+  'nov': 11,
+  'dec': 12,
+};
+
+/// Parses either CBE date shape, or null when neither is present.
+DateTime? _parseDate(String text) {
+  final slash = _slashDateRe.firstMatch(text);
+  if (slash != null) {
+    return DateTime(
+      int.parse(slash.group(3)!), // year
+      int.parse(slash.group(2)!), // month
+      int.parse(slash.group(1)!), // day
+      int.parse(slash.group(4)!), // hour
+      int.parse(slash.group(5)!), // minute
+    );
+  }
+
+  final named = _monthNameDateRe.firstMatch(text);
+  if (named != null) {
+    final month = _months[named.group(1)!.toLowerCase()];
+    if (month == null) return null;
+    var hour = int.parse(named.group(4)!);
+    final isPm = named.group(6)!.toUpperCase() == 'PM';
+    // 12-hour → 24-hour: 12 AM is 00, 12 PM stays 12.
+    if (isPm && hour != 12) hour += 12;
+    if (!isPm && hour == 12) hour = 0;
+    return DateTime(
+      int.parse(named.group(3)!), // year
+      month,
+      int.parse(named.group(2)!), // day
+      hour,
+      int.parse(named.group(5)!), // minute
+    );
+  }
+
+  return null;
+}
 
 /// Parses a raw CBE message into a [ParsedCbeMessage].
 ///
@@ -81,57 +129,37 @@ final _dateRe = RegExp(
 ParsedCbeMessage parseCbeText(String raw) {
   // Collapse every run of whitespace (incl. newlines) to a single space so
   // OCR line breaks don't defeat matching.
-  final text = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+  final text = normalizeCbeText(raw);
   if (text.isEmpty) {
     throw ParseException('Empty message');
   }
 
-  final amounts = _amountRe.allMatches(text).toList();
+  final amounts = findCurrencyAmounts(text);
   if (amounts.isEmpty) {
     throw ParseException('No amount found');
   }
 
-  // Direction: whichever keyword appears first (CBE messages carry only one).
-  final creditMatch = _creditRe.firstMatch(text);
-  final debitMatch = _debitRe.firstMatch(text);
-  final Match keyword;
-  final TxType type;
-  if (creditMatch != null &&
-      (debitMatch == null || creditMatch.start <= debitMatch.start)) {
-    keyword = creditMatch;
-    type = TxType.credit;
-  } else if (debitMatch != null) {
-    keyword = debitMatch;
-    type = TxType.debit;
-  } else {
+  final keywords = findTypeKeywords(text);
+  if (keywords.isEmpty) {
     throw ParseException('No credited/debited keyword found');
   }
 
-  // The transaction amount is the one nearest the keyword — never a later
-  // "Current Balance" figure.
-  var best = amounts.first;
-  var bestGap = _gap(best, keyword);
-  for (final m in amounts.skip(1)) {
-    final gap = _gap(m, keyword);
-    if (gap < bestGap) {
-      best = m;
-      bestGap = gap;
-    }
+  // The transaction amount is the one nearest the keyword, never a Current
+  // Balance figure. Same shared rule the AI gate uses.
+  final located = selectAmountNearKeyword(
+    normalized: text,
+    amounts: amounts,
+    keywords: keywords,
+  );
+  if (located == null) {
+    throw ParseException('No amount adjacent to a credited/debited keyword');
   }
-  final amountCents = _toCents(best.group(1)!);
+  final amountCents = located.cents;
+  final type = located.type;
 
   final reference = _refRe.firstMatch(text)?.group(0);
 
-  final dateMatch = _dateRe.firstMatch(text);
-  final DateTime? date = dateMatch == null
-      ? null
-      : DateTime(
-          int.parse(dateMatch.group(3)!), // year
-          int.parse(dateMatch.group(2)!), // month
-          int.parse(dateMatch.group(1)!), // day
-          int.parse(dateMatch.group(4)!), // hour
-          int.parse(dateMatch.group(5)!), // minute
-        );
+  final date = _parseDate(text);
 
   final confidence = (reference == null || date == null)
       ? Confidence.low
@@ -147,16 +175,4 @@ ParsedCbeMessage parseCbeText(String raw) {
   );
 }
 
-/// Character gap between an amount match and the keyword (0 if they overlap).
-int _gap(RegExpMatch amount, Match keyword) {
-  if (amount.start >= keyword.end) return amount.start - keyword.end;
-  if (keyword.start >= amount.end) return keyword.start - amount.end;
-  return 0;
-}
-
-/// Converts a "1,250,000.00" style amount to integer cents with no double
-/// arithmetic: the regex guarantees exactly two fractional digits.
-int _toCents(String amount) {
-  final parts = amount.replaceAll(',', '').split('.');
-  return int.parse(parts[0]) * 100 + int.parse(parts[1]);
-}
+// Gap measurement and cents conversion now live in amount_adjacency.dart.

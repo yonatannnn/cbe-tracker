@@ -1,3 +1,7 @@
+# Secrets — dart-define values (Gemini API key). NEVER commit these.
+secrets.json
+*.secrets.json
+
 # Miscellaneous
 *.class
 *.log

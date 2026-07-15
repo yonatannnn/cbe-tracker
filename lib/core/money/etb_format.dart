@@ -43,3 +43,22 @@ String formatSignedCents(int cents) {
   final sign = cents > 0 ? '+' : _minus;
   return '$sign $_currency ${_body(cents)}';
 }
+
+/// Parses user-typed money ("5,000.00", "5000", "850.5") into integer cents.
+///
+/// Returns null when the input isn't a plain positive amount — the caller
+/// shows a validation error rather than saving a guess. Integer math only.
+int? parseCentsInput(String input) {
+  final cleaned = input.replaceAll(RegExp(r'[,\s]'), '');
+  final match = RegExp(r'^(\d+)(?:\.(\d{1,2}))?$').firstMatch(cleaned);
+  if (match == null) return null;
+  final fraction = (match.group(2) ?? '0').padRight(2, '0');
+  return int.parse(match.group(1)!) * 100 + int.parse(fraction);
+}
+
+/// Formats cents for an editable text field: "5000.00" (no currency, no
+/// grouping) so it round-trips through [parseCentsInput].
+String centsToInput(int cents) {
+  final abs = cents.abs();
+  return '${abs ~/ 100}.${(abs % 100).toString().padLeft(2, '0')}';
+}

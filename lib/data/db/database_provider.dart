@@ -7,6 +7,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'daos/branch_dao.dart';
+import 'daos/settings_dao.dart';
 import 'daos/sms_dao.dart';
 import 'daos/transaction_dao.dart';
 import 'database.dart';
@@ -30,6 +31,10 @@ final transactionDaoProvider = Provider<TransactionDao>(
 
 final smsDaoProvider = Provider<SmsDao>(
   (ref) => ref.watch(appDatabaseProvider).smsDao,
+);
+
+final settingsDaoProvider = Provider<SettingsDao>(
+  (ref) => ref.watch(appDatabaseProvider).settingsDao,
 );
 
 /// Live list of non-archived branches. Also drives the first-run gate: an
