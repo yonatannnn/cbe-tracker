@@ -163,6 +163,8 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
     }
 
     await ref.read(settingsDaoProvider).setLastBranchId(branchId);
+    // A CBE SMS for this transaction may already be waiting (§FR-5).
+    await ref.read(reconcileServiceProvider).reconcile();
     if (!mounted) return;
 
     final branches = ref.read(activeBranchesProvider).value ?? const <Branch>[];
@@ -360,7 +362,7 @@ class _SummaryCard extends ConsumerWidget {
     final isCredit = parsed.type == TxType.credit;
     final signed = isCredit ? parsed.amountCents : -parsed.amountCents;
     final color = isCredit ? const Color(0xFF1B7A43) : theme.colorScheme.error;
-    final smsVerified = ref.watch(smsVerifiedProvider(parsed.reference));
+    final smsVerified = ref.watch(smsVerifiedProvider(parsed.reference)).value;
 
     return Card(
       child: Padding(
@@ -413,19 +415,20 @@ class _SummaryCard extends ConsumerWidget {
                 ),
               ),
             ],
-            // Hidden until Phase 6 provides real SMS verification.
+            // Shown when a CBE SMS with this reference is already in the
+            // shadow ledger — confirmation the screenshot is genuine (§FR-2).
             if (smsVerified != null) ...[
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(
-                    smsVerified ? Icons.verified : Icons.help_outline,
+                  const Icon(
+                    Icons.verified,
                     size: 16,
-                    color: theme.colorScheme.outline,
+                    color: Color(0xFF1B7A43),
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    smsVerified ? 'Verified against SMS' : 'No matching SMS',
+                    'Verified against SMS, ${_hhmm(smsVerified.receivedAt)}',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
@@ -436,6 +439,11 @@ class _SummaryCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _hhmm(DateTime moment) {
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${two(moment.hour)}:${two(moment.minute)}';
 }
 
 class _AiBadge extends StatelessWidget {

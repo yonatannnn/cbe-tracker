@@ -78,28 +78,55 @@ const int kBalanceLookback = 25;
 /// The receipt line is especially dangerous: "Total Amount Debited" CONTAINS
 /// the keyword "Debited", so without this list the fee-inclusive total sits
 /// closer to a keyword than the real amount and wins.
+/// Phrases marking a figure as a balance, a fee, or a fee-inclusive total —
+/// never the transaction itself.
+///
+/// FEES ARE EXCLUDED FROM THE TRANSACTION AMOUNT. Confirmed by the app owner,
+/// and consistent with §4 ("the figure adjacent to the credited/debited
+/// phrase"). CBE quotes both figures on every fee-bearing debit:
+///
+///   "You have successfully transferred ETB2.00 ... Service charge of ETB 0.50
+///    and VAT(15%) of ETB0.08 ... with total of ETB2.61 .Your current balance
+///    is ETB22,321.29."
+///
+/// We record 2.00. Consequence to be aware of: the account was actually
+/// debited 2.61, so a branch balance drifts from the real CBE balance by the
+/// fee on each outgoing transfer. Incoming payments carry no fees, so credits
+/// are unaffected. To capture fees instead, the fix is here — not in the
+/// caller.
 const List<String> _balanceCues = [
-  // SMS balance
+  // SMS balance ("Your current balance is ETB31,897.92")
   'current balance',
   'balance is',
-  // Receipt summary total
+  // Fee-inclusive totals: the receipt's "Total Amount Debited: ETB1.61" and
+  // the SMS's "with total of ETB2.61".
   'total amount debited',
   'total amount credited',
   'total amount',
-  // Receipt fee lines
+  'total of',
+  // Fee lines. CBE writes both "VAT (15%)" and "VAT(15%)".
   'service charge',
   'disaster recovery',
   'vat (',
+  'vat(',
 ];
 
+/// Wording the regex parser accepts.
+///
+/// Derived from 491 real CBE messages, not from §4's description — the live
+/// formats are "You have received ETB x", "A debit transaction of ETB x", and
+/// "You have successfully transferred ETB x", none of which say
+/// credited/debited. Direction was verified against the corpus: `transferred`
+/// was outgoing in 168/168 cases, `received` incoming in 96/96.
 const Map<TxType, List<String>> _canonicalWords = {
-  TxType.credit: ['credited'],
-  TxType.debit: ['debited'],
+  TxType.credit: ['credited', 'received'],
+  TxType.debit: ['debited', 'debit', 'transferred', 'withdrawn'],
 };
 
+/// The above plus the synonyms the AI prompt is allowed to use.
 const Map<TxType, List<String>> _extendedWords = {
   TxType.credit: ['credited', 'received', 'deposited'],
-  TxType.debit: ['debited', 'deducted', 'paid'],
+  TxType.debit: ['debited', 'debit', 'transferred', 'withdrawn', 'deducted', 'paid'],
 };
 
 /// Collapses every whitespace run to a single space. All offsets used by this
@@ -128,14 +155,43 @@ List<KeywordHit> findTypeKeywords(
       }
     }
   }
-  hits.sort((a, b) => a.start.compareTo(b.start));
-  return hits;
+
+  // Longest match first at any given position, so the dedupe below keeps
+  // "debited" and drops the "debit" nested inside it.
+  hits.sort((a, b) {
+    final byStart = a.start.compareTo(b.start);
+    return byStart != 0 ? byStart : b.end.compareTo(a.end);
+  });
+
+  // One hit per real occurrence: some vocabulary entries are prefixes of
+  // others ("debit"/"debited"), which would otherwise double-count and skew
+  // the gap measurement.
+  final deduped = <KeywordHit>[];
+  for (final hit in hits) {
+    final swallowed = deduped.any(
+      (kept) => kept.start <= hit.start && hit.end <= kept.end,
+    );
+    if (!swallowed) deduped.add(hit);
+  }
+  return deduped;
 }
 
-/// Every "ETB 5,000.00"-style amount in [normalized] — the regex parser's
-/// candidate set.
+/// Every ETB-prefixed amount in [normalized] — the regex parser's candidate
+/// set.
+///
+/// Decimals are OPTIONAL and may be one or two digits: across 491 real CBE
+/// messages the amount was written with two decimals 1284 times, one decimal
+/// 64 times ("ETB 2000.0") and none at all 4 times. Requiring `\.\d{2}` — as
+/// §4 specifies — silently dropped every message in the latter two shapes.
+///
+/// The `\s*` also covers CBE's inconsistent spacing ("ETB2.00" vs "ETB 2.00"),
+/// while account ids like "ETB-8402" are excluded because `-` isn't
+/// whitespace.
 List<AmountHit> findCurrencyAmounts(String normalized) {
-  final re = RegExp(r'(?:ETB|Br)\s*([\d,]+\.\d{2})', caseSensitive: false);
+  final re = RegExp(
+    r'(?:ETB|Br)\s*([\d,]+(?:\.\d{1,2})?)',
+    caseSensitive: false,
+  );
   final hits = <AmountHit>[];
   for (final match in re.allMatches(normalized)) {
     final digits = match.group(1)!;
@@ -165,10 +221,13 @@ List<AmountHit> findAmountOccurrences(String normalized, int cents) {
   final twoDp = fraction.toString().padLeft(2, '0');
 
   final variants = <String>{
-    '$grouped.$twoDp',
-    '$plain.$twoDp',
-    if (fraction == 0) grouped,
-    if (fraction == 0) plain,
+    '$grouped.$twoDp', // 5,000.00
+    '$plain.$twoDp', // 5000.00
+    // CBE also writes a single decimal ("ETB 2000.0", "ETB 0.5").
+    if (fraction % 10 == 0) '$grouped.${fraction ~/ 10}',
+    if (fraction % 10 == 0) '$plain.${fraction ~/ 10}',
+    if (fraction == 0) grouped, // 5,000
+    if (fraction == 0) plain, // 5000
   };
 
   final hits = <AmountHit>[];

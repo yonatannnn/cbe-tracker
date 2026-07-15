@@ -1682,6 +1682,405 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   }
 }
 
+class $SmsDebugLogTable extends SmsDebugLog
+    with TableInfo<$SmsDebugLogTable, SmsDebugEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SmsDebugLogTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _addressMeta = const VerificationMeta(
+    'address',
+  );
+  @override
+  late final GeneratedColumn<String> address = GeneratedColumn<String>(
+    'address',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _receivedAtMeta = const VerificationMeta(
+    'receivedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> receivedAt = GeneratedColumn<DateTime>(
+    'received_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _loggedAtMeta = const VerificationMeta(
+    'loggedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> loggedAt = GeneratedColumn<DateTime>(
+    'logged_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    address,
+    body,
+    receivedAt,
+    reason,
+    loggedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sms_debug_log';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SmsDebugEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('address')) {
+      context.handle(
+        _addressMeta,
+        address.isAcceptableOrUnknown(data['address']!, _addressMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_addressMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('received_at')) {
+      context.handle(
+        _receivedAtMeta,
+        receivedAt.isAcceptableOrUnknown(data['received_at']!, _receivedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_receivedAtMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    }
+    if (data.containsKey('logged_at')) {
+      context.handle(
+        _loggedAtMeta,
+        loggedAt.isAcceptableOrUnknown(data['logged_at']!, _loggedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SmsDebugEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SmsDebugEntry(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      address: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}address'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      receivedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}received_at'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      ),
+      loggedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}logged_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SmsDebugLogTable createAlias(String alias) {
+    return $SmsDebugLogTable(attachedDatabase, alias);
+  }
+}
+
+class SmsDebugEntry extends DataClass implements Insertable<SmsDebugEntry> {
+  final int id;
+  final String address;
+  final String body;
+  final DateTime receivedAt;
+
+  /// The ParseException message, for triage.
+  final String? reason;
+  final DateTime loggedAt;
+  const SmsDebugEntry({
+    required this.id,
+    required this.address,
+    required this.body,
+    required this.receivedAt,
+    this.reason,
+    required this.loggedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['address'] = Variable<String>(address);
+    map['body'] = Variable<String>(body);
+    map['received_at'] = Variable<DateTime>(receivedAt);
+    if (!nullToAbsent || reason != null) {
+      map['reason'] = Variable<String>(reason);
+    }
+    map['logged_at'] = Variable<DateTime>(loggedAt);
+    return map;
+  }
+
+  SmsDebugLogCompanion toCompanion(bool nullToAbsent) {
+    return SmsDebugLogCompanion(
+      id: Value(id),
+      address: Value(address),
+      body: Value(body),
+      receivedAt: Value(receivedAt),
+      reason: reason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reason),
+      loggedAt: Value(loggedAt),
+    );
+  }
+
+  factory SmsDebugEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SmsDebugEntry(
+      id: serializer.fromJson<int>(json['id']),
+      address: serializer.fromJson<String>(json['address']),
+      body: serializer.fromJson<String>(json['body']),
+      receivedAt: serializer.fromJson<DateTime>(json['receivedAt']),
+      reason: serializer.fromJson<String?>(json['reason']),
+      loggedAt: serializer.fromJson<DateTime>(json['loggedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'address': serializer.toJson<String>(address),
+      'body': serializer.toJson<String>(body),
+      'receivedAt': serializer.toJson<DateTime>(receivedAt),
+      'reason': serializer.toJson<String?>(reason),
+      'loggedAt': serializer.toJson<DateTime>(loggedAt),
+    };
+  }
+
+  SmsDebugEntry copyWith({
+    int? id,
+    String? address,
+    String? body,
+    DateTime? receivedAt,
+    Value<String?> reason = const Value.absent(),
+    DateTime? loggedAt,
+  }) => SmsDebugEntry(
+    id: id ?? this.id,
+    address: address ?? this.address,
+    body: body ?? this.body,
+    receivedAt: receivedAt ?? this.receivedAt,
+    reason: reason.present ? reason.value : this.reason,
+    loggedAt: loggedAt ?? this.loggedAt,
+  );
+  SmsDebugEntry copyWithCompanion(SmsDebugLogCompanion data) {
+    return SmsDebugEntry(
+      id: data.id.present ? data.id.value : this.id,
+      address: data.address.present ? data.address.value : this.address,
+      body: data.body.present ? data.body.value : this.body,
+      receivedAt: data.receivedAt.present
+          ? data.receivedAt.value
+          : this.receivedAt,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      loggedAt: data.loggedAt.present ? data.loggedAt.value : this.loggedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SmsDebugEntry(')
+          ..write('id: $id, ')
+          ..write('address: $address, ')
+          ..write('body: $body, ')
+          ..write('receivedAt: $receivedAt, ')
+          ..write('reason: $reason, ')
+          ..write('loggedAt: $loggedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, address, body, receivedAt, reason, loggedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SmsDebugEntry &&
+          other.id == this.id &&
+          other.address == this.address &&
+          other.body == this.body &&
+          other.receivedAt == this.receivedAt &&
+          other.reason == this.reason &&
+          other.loggedAt == this.loggedAt);
+}
+
+class SmsDebugLogCompanion extends UpdateCompanion<SmsDebugEntry> {
+  final Value<int> id;
+  final Value<String> address;
+  final Value<String> body;
+  final Value<DateTime> receivedAt;
+  final Value<String?> reason;
+  final Value<DateTime> loggedAt;
+  const SmsDebugLogCompanion({
+    this.id = const Value.absent(),
+    this.address = const Value.absent(),
+    this.body = const Value.absent(),
+    this.receivedAt = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.loggedAt = const Value.absent(),
+  });
+  SmsDebugLogCompanion.insert({
+    this.id = const Value.absent(),
+    required String address,
+    required String body,
+    required DateTime receivedAt,
+    this.reason = const Value.absent(),
+    this.loggedAt = const Value.absent(),
+  }) : address = Value(address),
+       body = Value(body),
+       receivedAt = Value(receivedAt);
+  static Insertable<SmsDebugEntry> custom({
+    Expression<int>? id,
+    Expression<String>? address,
+    Expression<String>? body,
+    Expression<DateTime>? receivedAt,
+    Expression<String>? reason,
+    Expression<DateTime>? loggedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (address != null) 'address': address,
+      if (body != null) 'body': body,
+      if (receivedAt != null) 'received_at': receivedAt,
+      if (reason != null) 'reason': reason,
+      if (loggedAt != null) 'logged_at': loggedAt,
+    });
+  }
+
+  SmsDebugLogCompanion copyWith({
+    Value<int>? id,
+    Value<String>? address,
+    Value<String>? body,
+    Value<DateTime>? receivedAt,
+    Value<String?>? reason,
+    Value<DateTime>? loggedAt,
+  }) {
+    return SmsDebugLogCompanion(
+      id: id ?? this.id,
+      address: address ?? this.address,
+      body: body ?? this.body,
+      receivedAt: receivedAt ?? this.receivedAt,
+      reason: reason ?? this.reason,
+      loggedAt: loggedAt ?? this.loggedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (address.present) {
+      map['address'] = Variable<String>(address.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (receivedAt.present) {
+      map['received_at'] = Variable<DateTime>(receivedAt.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (loggedAt.present) {
+      map['logged_at'] = Variable<DateTime>(loggedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SmsDebugLogCompanion(')
+          ..write('id: $id, ')
+          ..write('address: $address, ')
+          ..write('body: $body, ')
+          ..write('receivedAt: $receivedAt, ')
+          ..write('reason: $reason, ')
+          ..write('loggedAt: $loggedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1691,6 +2090,15 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $SmsDebugLogTable smsDebugLog = $SmsDebugLogTable(this);
+  late final Index smsBodyTimeUnique = Index(
+    'sms_body_time_unique',
+    'CREATE UNIQUE INDEX sms_body_time_unique ON sms_transactions (sms_body, received_at)',
+  );
+  late final Index smsDebugUnique = Index(
+    'sms_debug_unique',
+    'CREATE UNIQUE INDEX sms_debug_unique ON sms_debug_log (body, received_at)',
+  );
   late final BranchDao branchDao = BranchDao(this as AppDatabase);
   late final TransactionDao transactionDao = TransactionDao(
     this as AppDatabase,
@@ -1706,6 +2114,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     transactions,
     smsTransactions,
     appSettings,
+    smsDebugLog,
+    smsBodyTimeUnique,
+    smsDebugUnique,
   ];
 }
 
@@ -3020,6 +3431,221 @@ typedef $$AppSettingsTableProcessedTableManager =
       AppSetting,
       PrefetchHooks Function()
     >;
+typedef $$SmsDebugLogTableCreateCompanionBuilder =
+    SmsDebugLogCompanion Function({
+      Value<int> id,
+      required String address,
+      required String body,
+      required DateTime receivedAt,
+      Value<String?> reason,
+      Value<DateTime> loggedAt,
+    });
+typedef $$SmsDebugLogTableUpdateCompanionBuilder =
+    SmsDebugLogCompanion Function({
+      Value<int> id,
+      Value<String> address,
+      Value<String> body,
+      Value<DateTime> receivedAt,
+      Value<String?> reason,
+      Value<DateTime> loggedAt,
+    });
+
+class $$SmsDebugLogTableFilterComposer
+    extends Composer<_$AppDatabase, $SmsDebugLogTable> {
+  $$SmsDebugLogTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get address => $composableBuilder(
+    column: $table.address,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get receivedAt => $composableBuilder(
+    column: $table.receivedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get loggedAt => $composableBuilder(
+    column: $table.loggedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SmsDebugLogTableOrderingComposer
+    extends Composer<_$AppDatabase, $SmsDebugLogTable> {
+  $$SmsDebugLogTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get address => $composableBuilder(
+    column: $table.address,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get receivedAt => $composableBuilder(
+    column: $table.receivedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get loggedAt => $composableBuilder(
+    column: $table.loggedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SmsDebugLogTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SmsDebugLogTable> {
+  $$SmsDebugLogTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get address =>
+      $composableBuilder(column: $table.address, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get receivedAt => $composableBuilder(
+    column: $table.receivedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get loggedAt =>
+      $composableBuilder(column: $table.loggedAt, builder: (column) => column);
+}
+
+class $$SmsDebugLogTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SmsDebugLogTable,
+          SmsDebugEntry,
+          $$SmsDebugLogTableFilterComposer,
+          $$SmsDebugLogTableOrderingComposer,
+          $$SmsDebugLogTableAnnotationComposer,
+          $$SmsDebugLogTableCreateCompanionBuilder,
+          $$SmsDebugLogTableUpdateCompanionBuilder,
+          (
+            SmsDebugEntry,
+            BaseReferences<_$AppDatabase, $SmsDebugLogTable, SmsDebugEntry>,
+          ),
+          SmsDebugEntry,
+          PrefetchHooks Function()
+        > {
+  $$SmsDebugLogTableTableManager(_$AppDatabase db, $SmsDebugLogTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SmsDebugLogTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SmsDebugLogTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SmsDebugLogTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> address = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<DateTime> receivedAt = const Value.absent(),
+                Value<String?> reason = const Value.absent(),
+                Value<DateTime> loggedAt = const Value.absent(),
+              }) => SmsDebugLogCompanion(
+                id: id,
+                address: address,
+                body: body,
+                receivedAt: receivedAt,
+                reason: reason,
+                loggedAt: loggedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String address,
+                required String body,
+                required DateTime receivedAt,
+                Value<String?> reason = const Value.absent(),
+                Value<DateTime> loggedAt = const Value.absent(),
+              }) => SmsDebugLogCompanion.insert(
+                id: id,
+                address: address,
+                body: body,
+                receivedAt: receivedAt,
+                reason: reason,
+                loggedAt: loggedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SmsDebugLogTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SmsDebugLogTable,
+      SmsDebugEntry,
+      $$SmsDebugLogTableFilterComposer,
+      $$SmsDebugLogTableOrderingComposer,
+      $$SmsDebugLogTableAnnotationComposer,
+      $$SmsDebugLogTableCreateCompanionBuilder,
+      $$SmsDebugLogTableUpdateCompanionBuilder,
+      (
+        SmsDebugEntry,
+        BaseReferences<_$AppDatabase, $SmsDebugLogTable, SmsDebugEntry>,
+      ),
+      SmsDebugEntry,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3032,4 +3658,6 @@ class $AppDatabaseManager {
       $$SmsTransactionsTableTableManager(_db, _db.smsTransactions);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$SmsDebugLogTableTableManager get smsDebugLog =>
+      $$SmsDebugLogTableTableManager(_db, _db.smsDebugLog);
 }

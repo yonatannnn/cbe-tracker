@@ -368,6 +368,10 @@ void main() {
   });
 
   group('SmsDao — shadow ledger', () {
+    // Distinct bodies: the ledger dedupes on (smsBody, receivedAt), so reusing
+    // one body would collapse separate test messages into a single row.
+    var seq = 0;
+
     SmsTransactionsCompanion sms({
       required int amountCents,
       String? reference,
@@ -375,12 +379,65 @@ void main() {
     }) {
       return SmsTransactionsCompanion.insert(
         amountCents: amountCents,
-        smsBody: 'CBE test message',
+        smsBody: 'CBE test message #${++seq}',
         receivedAt: receivedAt ?? DateTime(2026, 7, 14, 10, 0),
         type: const Value(TxType.credit),
         reference: Value(reference),
       );
     }
+
+    // Regression: the shadow ledger used to dedupe on `reference` alone. 133
+    // of 271 real CBE messages carry NO reference, and SQLite's UNIQUE allows
+    // unlimited NULLs — so every re-sync of the inbox silently re-inserted
+    // them. Dedupe is now (smsBody, receivedAt) as well.
+    test('re-syncing a reference-less SMS does NOT duplicate it', () async {
+      final body = 'You have received ETB 4,000.00 from account 1****2';
+      final at = DateTime(2026, 7, 15, 11, 45);
+
+      final first = await db.smsDao.insertIfNew(
+        SmsTransactionsCompanion.insert(
+          amountCents: 400000,
+          smsBody: body,
+          receivedAt: at,
+          type: const Value(TxType.credit),
+          reference: const Value(null), // modern CBE: no FT number
+        ),
+      );
+      // Exactly what tapping "Sync" a second time does.
+      final second = await db.smsDao.insertIfNew(
+        SmsTransactionsCompanion.insert(
+          amountCents: 400000,
+          smsBody: body,
+          receivedAt: at,
+          type: const Value(TxType.credit),
+          reference: const Value(null),
+        ),
+      );
+
+      expect(first, InsertResult.inserted);
+      expect(second, InsertResult.duplicate);
+      expect((await db.select(db.smsTransactions).get()).length, 1);
+    });
+
+    test('same body at a different time is a different message', () async {
+      const body = 'You have received ETB 4,000.00 from account 1****2';
+      for (final at in [
+        DateTime(2026, 7, 15, 11, 45),
+        DateTime(2026, 7, 15, 14, 20),
+      ]) {
+        await db.smsDao.insertIfNew(
+          SmsTransactionsCompanion.insert(
+            amountCents: 400000,
+            smsBody: body,
+            receivedAt: at,
+            type: const Value(TxType.credit),
+            reference: const Value(null),
+          ),
+        );
+      }
+      // Two genuine payments of the same amount must both survive.
+      expect((await db.select(db.smsTransactions).get()).length, 2);
+    });
 
     test('duplicate reference → duplicate', () async {
       final first = await db.smsDao.insertIfNew(
@@ -417,6 +474,41 @@ void main() {
 
       final unmatched = await db.smsDao.watchUnmatchedForDay(day).first;
       expect(unmatched.map((s) => s.reference), ['FTU00001']);
+    });
+
+    test('debug log records each unreadable body once, not once per sync',
+        () async {
+      const body = 'ለውድ ደንበኛችን፡ የጥንቃቄ መልዕክት አለን።';
+      final at = DateTime(2026, 7, 15, 11, 45);
+
+      // Three syncs of the same inbox.
+      for (var i = 0; i < 3; i++) {
+        await db.smsDao.logUnreadable(
+          address: 'CBE',
+          body: body,
+          receivedAt: at,
+          reason: 'No amount found',
+        );
+      }
+
+      expect((await db.select(db.smsDebugLog).get()).length, 1);
+    });
+
+    test('a body that starts parsing is retired from the debug log', () async {
+      const body = 'You have received ETB 4,000.00 from account 1****2';
+      final at = DateTime(2026, 7, 15, 11, 45);
+      await db.smsDao.logUnreadable(
+        address: 'CBE',
+        body: body,
+        receivedAt: at,
+        reason: 'No credited/debited keyword found',
+      );
+      expect((await db.select(db.smsDebugLog).get()).length, 1);
+
+      // After a parser fix the same body now reads — the stale entry must go,
+      // or the log overstates how much we can't read.
+      await db.smsDao.clearDebugFor(body);
+      expect(await db.select(db.smsDebugLog).get(), isEmpty);
     });
 
     test('linkToTransaction updates counts and removes from unmatched',

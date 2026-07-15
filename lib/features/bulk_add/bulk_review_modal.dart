@@ -13,6 +13,7 @@ import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
 import '../../services/bulk_processor.dart';
+import '../reconcile/reconcile_providers.dart';
 import '../shared/manual_entry_fields.dart';
 import 'bulk_review_state.dart';
 
@@ -86,6 +87,8 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
       // elsewhere mid-review — a real error, and the whole batch rolls back.
       await ref.read(transactionDaoProvider).insertManyAtomic(entries);
       await ref.read(settingsDaoProvider).setLastBranchId(widget.branchId);
+      // CBE SMS for these may already be waiting to match (§FR-5).
+      await ref.read(reconcileServiceProvider).reconcile();
       if (!mounted) return;
       Navigator.pop(context, rows.length);
     } on Object {

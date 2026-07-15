@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../../../core/parser/cbe_parser.dart' show TxType;
 import '../database.dart';
 import '../tables.dart';
 
@@ -29,6 +30,27 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
             ..where((t) => t.reference.equals(reference))
             ..limit(1))
           .getSingleOrNull();
+
+  /// Reconciliation fallback candidates (§FR-5): same amount, same type, and
+  /// the same LOCAL calendar day. [dayStart]/[dayEnd] bracket that day.
+  ///
+  /// Returning a list rather than a single row is deliberate — the caller must
+  /// see when there are several, because an ambiguous match stays unmatched.
+  Future<List<Transaction>> findCandidates({
+    required int amountCents,
+    required TxType type,
+    required DateTime dayStart,
+    required DateTime dayEnd,
+  }) {
+    return (select(transactions)..where(
+          (t) =>
+              t.amountCents.equals(amountCents) &
+              t.type.equalsValue(type) &
+              t.transactionDate.isBiggerOrEqualValue(dayStart) &
+              t.transactionDate.isSmallerThanValue(dayEnd),
+        ))
+        .get();
+  }
 
   /// Commits every row in ONE transaction. Any failure — including an
   /// unexpected duplicate reference — rolls back the WHOLE batch.

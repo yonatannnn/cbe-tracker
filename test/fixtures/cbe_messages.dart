@@ -232,6 +232,91 @@ final fixtureRealReceiptDebit = CbeFixture.value(
   confidence: Confidence.high,
 );
 
+// ── Real CBE SMS ───────────────────────────────────────────────────────────
+//
+// Transcribed from an actual 491-message CBE inbox (names and account digits
+// anonymized). §4 describes only the legacy "has been credited with ETB x …
+// FT…" wording, which turned out to be a MINORITY of live traffic — the
+// parser read just 105 of 491 before these were added.
+//
+// Shared traits that broke the original parser:
+//  * the live wording is received / transferred / "a debit transaction of",
+//    never credited/debited;
+//  * amounts appear as "ETB2.00", "ETB 2000.0" and "ETB 4,000.00";
+//  * fee lines and a "with total of" summary give 4+ decoy amounts;
+//  * there is NO date and usually NO FT reference — so these parse LOW by
+//    design, which is correct: for SMS we take the time from the message
+//    metadata, not the body.
+
+/// 14. Live credit: "You have received".
+final fixtureSmsReceived = CbeFixture.value(
+  name: '14: real SMS, credit via "You have received"',
+  raw:
+      'ABEBE KEBEDE TESFAYE You have received ETB 4,000.00 from account '
+      '1********2 (ALMAZ TESFA GIRMA) to your account 1********3. Your '
+      'current balance is ETB31,897.92. Thanks for Banking with CBE. '
+      'https://mbreciept.cbe.com.et/v2-hfHCxzX0x3dSPNjfeMcj',
+  type: TxType.credit,
+  amountCents: 400000,
+  // No FT number in modern messages — only an opaque receipt URL.
+  reference: null,
+  date: null,
+  confidence: Confidence.low,
+);
+
+/// 15. Live debit: "A debit transaction of", one-decimal amount, fee lines.
+final fixtureSmsDebitTransaction = CbeFixture.value(
+  name: '15: real SMS, debit via "A debit transaction of" (1-decimal amount)',
+  raw:
+      'ABEBE KEBEDE TESFAYE A debit transaction of ETB 2000.0. has occurred '
+      'on your account 1********2. Service charge of ETB 10.00 and VAT(15%) '
+      'of ETB1.50 and Disaster Recovery(5%) of 0.50 with total of ETB2012.00 '
+      '.Your current balance is ETB22,481.12. Thanks for Banking with CBE. '
+      'https://mbreciept.cbe.com.et/v2-hfHCxzXrkU12QGxusq3k',
+  type: TxType.debit,
+  // The transaction, not the ETB2012.00 fee-inclusive total.
+  amountCents: 200000,
+  reference: null,
+  date: null,
+  confidence: Confidence.low,
+);
+
+/// 16. Live debit: "You have successfully transferred", no space after ETB.
+final fixtureSmsTransferred = CbeFixture.value(
+  name: '16: real SMS, debit via "successfully transferred"',
+  raw:
+      'ABEBE KEBEDE TESFAYE You have successfully transferred ETB2.00 from '
+      'account 1********2 to account 1********3 (ALMAZ TESFA GIRMA). Service '
+      'charge of ETB 0.50 and VAT(15%) of ETB0.08 and Disaster Recovery(5%) '
+      'of 0.03 with total of ETB2.61 .Your current balance is ETB22,321.29. '
+      'Thanks for Banking with CBE. '
+      'https://mbreciept.cbe.com.et/v2-hfHCxzXQNBsuCXntXW0y',
+  type: TxType.debit,
+  // Not the 2.61 total, not the 0.50 charge, not the 22,321.29 balance.
+  amountCents: 200,
+  reference: null,
+  date: null,
+  confidence: Confidence.low,
+);
+
+/// 17. Amharic fraud-warning notice — CBE sends these; they are NOT
+///     transactions and must be refused, not guessed at.
+final fixtureSmsAmharicNotice = CbeFixture.throws(
+  name: '17: real SMS, Amharic security notice → ParseException',
+  raw:
+      'ለውድ ደንበኛችን፡ የጥንቃቄ መልዕክት አለን። ከሞባይል ባንኪንግ አገልግሎት ጋር በተያያዘ እርስዎ በአካል ወደ '
+      'ባንካችን ቅርንጫፎች ሳይመጡ በስልክ ተደውሎ የሚሰጥ ምንም አይነት አገልግሎትም ሆነ የአሠራር ሂደት የሌለን '
+      'መሆኑን እያሳወቅን፤ የይለፍ ቃልዎን ለሌላ ሶስተኛ ወገን ተጋላጭ ባለማድረግ በጥንቃቄ እንዲገለገሉ እናሳውቃለን፡፡',
+);
+
+/// 18. CBEBirr PIN-expiry notice — also not a transaction.
+final fixtureSmsPinNotice = CbeFixture.throws(
+  name: '18: real SMS, CBEBirr PIN notice → ParseException',
+  raw:
+      'ABEBE KEBEDE TESFAYE, your PIN will be expired in 0 days, please '
+      'change it in time. Thank you!',
+);
+
 /// Fixtures 1–5.
 final cleanFixtures = <CbeFixture>[
   fixtureCreditClean,
@@ -252,8 +337,15 @@ final edgeFixtures = <CbeFixture>[
   fixtureEmpty,
 ];
 
-/// Fixtures transcribed from real screenshots.
-final realFixtures = <CbeFixture>[fixtureRealReceiptDebit];
+/// Fixtures transcribed from real screenshots and a real SMS inbox.
+final realFixtures = <CbeFixture>[
+  fixtureRealReceiptDebit,
+  fixtureSmsReceived,
+  fixtureSmsDebitTransaction,
+  fixtureSmsTransferred,
+  fixtureSmsAmharicNotice,
+  fixtureSmsPinNotice,
+];
 
 /// All fixtures, in numbered order.
 final allFixtures = <CbeFixture>[

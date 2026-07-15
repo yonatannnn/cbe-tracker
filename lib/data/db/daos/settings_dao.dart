@@ -12,6 +12,7 @@ class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin 
   SettingsDao(super.db);
 
   static const _lastBranchKey = 'last_branch_id';
+  static const _smsStateKey = 'sms_permission_state';
 
   Future<String?> _get(String key) async {
     final row = await (select(
@@ -40,4 +41,28 @@ class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin 
         .watchSingleOrNull()
         .map((row) => row == null ? null : int.tryParse(row.value));
   }
+
+  /// Where the user got to with the SMS permission (§FR-4).
+  ///
+  /// Deliberately tri-state. A plain "skipped" bool can't tell "never asked"
+  /// from "granted"; and inferring it from whether any SMS exist is wrong too,
+  /// because a first sync pulls HISTORICAL messages — today's count can be 0
+  /// with permission granted, stranding the user on the explainer forever.
+  Stream<SmsPermissionState> watchSmsPermissionState() {
+    return (select(appSettings)..where((s) => s.key.equals(_smsStateKey)))
+        .watchSingleOrNull()
+        .map(
+          (row) => switch (row?.value) {
+            'granted' => SmsPermissionState.granted,
+            'skipped' => SmsPermissionState.skipped,
+            _ => SmsPermissionState.unasked,
+          },
+        );
+  }
+
+  Future<void> setSmsPermissionState(SmsPermissionState state) =>
+      _set(_smsStateKey, state.name);
 }
+
+/// Tri-state so "never asked" is distinguishable from granted/skipped.
+enum SmsPermissionState { unasked, granted, skipped }

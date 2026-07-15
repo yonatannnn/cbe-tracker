@@ -7,6 +7,7 @@ mixin _$SmsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BranchesTable get branches => attachedDatabase.branches;
   $TransactionsTable get transactions => attachedDatabase.transactions;
   $SmsTransactionsTable get smsTransactions => attachedDatabase.smsTransactions;
+  $SmsDebugLogTable get smsDebugLog => attachedDatabase.smsDebugLog;
   SmsDaoManager get managers => SmsDaoManager(this);
 }
 
@@ -22,4 +23,6 @@ class SmsDaoManager {
         _db.attachedDatabase,
         _db.smsTransactions,
       );
+  $$SmsDebugLogTableTableManager get smsDebugLog =>
+      $$SmsDebugLogTableTableManager(_db.attachedDatabase, _db.smsDebugLog);
 }

@@ -55,7 +55,7 @@ class BranchHasTransactionsException implements Exception {
 }
 
 @DriftDatabase(
-  tables: [Branches, Transactions, SmsTransactions, AppSettings],
+  tables: [Branches, Transactions, SmsTransactions, AppSettings, SmsDebugLog],
   daos: [BranchDao, TransactionDao, SmsDao, SettingsDao],
 )
 class AppDatabase extends _$AppDatabase {
@@ -66,15 +66,44 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
     onUpgrade: (m, from, to) async {
-      // v2 adds the key-value settings table (last-used branch). Existing
-      // installs keep their branches and transactions.
+      // Each step is additive — existing branches and transactions survive.
+      // v2: key-value settings table (last-used branch).
       if (from < 2) await m.createTable(appSettings);
+      // v3: debug log of unreadable CBE SMS bodies (§FR-4).
+      if (from < 3) await m.createTable(smsDebugLog);
+
+      // v4: content-based dedupe for the SMS tables. The reference alone
+      // can't dedupe — modern CBE messages have none, and SQLite allows any
+      // number of NULLs in a UNIQUE column, so re-syncing duplicated them.
+      if (from < 4) {
+        // Existing rows must be deduped BEFORE the unique indexes are added,
+        // or index creation fails outright. Live data really is affected: the
+        // debug log had 606 rows for 192 distinct messages. Keep the earliest
+        // row of each group so ids stay stable.
+        await customStatement(
+          'DELETE FROM sms_transactions WHERE id NOT IN '
+          '(SELECT MIN(id) FROM sms_transactions GROUP BY sms_body, '
+          'received_at)',
+        );
+        await customStatement(
+          'DELETE FROM sms_debug_log WHERE id NOT IN '
+          '(SELECT MIN(id) FROM sms_debug_log GROUP BY body, received_at)',
+        );
+        await customStatement(
+          'CREATE UNIQUE INDEX IF NOT EXISTS sms_body_time_unique '
+          'ON sms_transactions (sms_body, received_at)',
+        );
+        await customStatement(
+          'CREATE UNIQUE INDEX IF NOT EXISTS sms_debug_unique '
+          'ON sms_debug_log (body, received_at)',
+        );
+      }
     },
     beforeOpen: (details) async {
       // Enforce referential integrity (branchId / matchedTransactionId FKs).

@@ -48,6 +48,38 @@ void main() {
     });
   });
 
+  group('fees are excluded from the transaction amount', () {
+    // Settled business rule (confirmed by the app owner, consistent with §4):
+    // record what was transferred, NOT what left the account. CBE quotes both
+    // on every fee-bearing debit, so this must never drift.
+    test('receipt: records 1.00, not the 1.61 total', () {
+      expect(parseCbeText(fixtureRealReceiptDebit.raw).amountCents, 100);
+    });
+
+    test('SMS "debit transaction": records 2000.0, not the 2012.00 total', () {
+      final result = parseCbeText(fixtureSmsDebitTransaction.raw);
+      expect(result.amountCents, 200000);
+      expect(result.amountCents, isNot(201200), reason: 'fee-inclusive total');
+      expect(result.amountCents, isNot(1000), reason: 'service charge');
+      expect(result.amountCents, isNot(2248112), reason: 'current balance');
+    });
+
+    test('SMS "transferred": records 2.00, not the 2.61 total', () {
+      final result = parseCbeText(fixtureSmsTransferred.raw);
+      expect(result.amountCents, 200);
+      expect(result.amountCents, isNot(261), reason: 'fee-inclusive total');
+      expect(result.amountCents, isNot(50), reason: 'service charge');
+      expect(result.amountCents, isNot(8), reason: 'VAT');
+      expect(result.amountCents, isNot(2232129), reason: 'current balance');
+    });
+
+    test('credits are unaffected — no fee lines on incoming money', () {
+      final result = parseCbeText(fixtureSmsReceived.raw);
+      expect(result.amountCents, 400000);
+      expect(result.amountCents, isNot(3189792), reason: 'current balance');
+    });
+  });
+
   group('date formats', () {
     ParsedCbeMessage parseWithDate(String dateText) => parseCbeText(
       'ETB 5,000.00 has been credited $dateText with transaction ID: '
