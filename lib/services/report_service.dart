@@ -46,10 +46,18 @@ class ReconciliationFooter {
   const ReconciliationFooter({
     required this.personalCount,
     required this.unresolvedCount,
+    required this.crossChecked,
   });
 
   final int personalCount;
   final int unresolvedCount;
+
+  /// Whether the SMS cross-check actually ran. On iOS, or with SMS permission
+  /// skipped, "0 unresolved" would read as "everything checked out" when in
+  /// truth nothing was ever checked — and this line is baked into every shared
+  /// PDF, so the recipient can't ask. False here swaps the counts for an
+  /// honest "not available".
+  final bool crossChecked;
 
   bool get isEmpty => personalCount == 0 && unresolvedCount == 0;
 }
@@ -98,7 +106,13 @@ class ReportService {
   final SmsDao smsDao;
 
   /// The full report for [day], every active branch.
-  Future<DailyReport> dailyReport(DateTime day) async {
+  ///
+  /// [crossChecked] is whether SMS verification is running on this device —
+  /// the caller knows (platform + permission), this service doesn't.
+  Future<DailyReport> dailyReport(
+    DateTime day, {
+    required bool crossChecked,
+  }) async {
     final start = DateTime(day.year, day.month, day.day);
     final end = start.add(const Duration(days: 1));
 
@@ -126,16 +140,20 @@ class ReportService {
     return DailyReport(
       day: start,
       branches: reports,
-      footer: await reconciliationFooter(start),
+      footer: await reconciliationFooter(start, crossChecked: crossChecked),
     );
   }
 
   /// Personal / unresolved SMS counts for [day].
-  Future<ReconciliationFooter> reconciliationFooter(DateTime day) async {
+  Future<ReconciliationFooter> reconciliationFooter(
+    DateTime day, {
+    required bool crossChecked,
+  }) async {
     final counts = await smsDao.footerCountsForDay(day);
     return ReconciliationFooter(
       personalCount: counts.personal,
       unresolvedCount: counts.unresolved,
+      crossChecked: crossChecked,
     );
   }
 }

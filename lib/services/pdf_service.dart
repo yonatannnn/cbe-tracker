@@ -97,9 +97,17 @@ class PdfService {
       ),
     );
 
+    // The branch id, not just the name, decides the filename. _safeName keeps
+    // only [A-Za-z0-9], so every Amharic name (ቦሌ, ፒያሳ, መገናኛ) sanitises to the
+    // empty string and falls back to the same literal 'Branch' — and names are
+    // not unique in the schema anyway. Sharing per-branch reports writes them
+    // all into one temp directory, so a shared filename means each PDF silently
+    // overwrites the last and every manager is handed the same branch's
+    // figures. The id makes collision impossible.
     return _write(
       doc,
-      '${_safeName(branch.branch.name)}_${_fileDate(day)}.pdf',
+      '${_safeName(branch.branch.name)}-${branch.branch.id}_'
+      '${_fileDate(day)}.pdf',
     );
   }
 
@@ -272,13 +280,18 @@ class PdfService {
   }
 
   pw.Widget _footer(ReconciliationFooter footer) {
+    // A PDF gets forwarded — its reader can't ask what "0 unresolved" means.
+    // When the SMS cross-check never ran, printing counts would present an
+    // unchecked day as a verified one.
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Divider(),
         pw.Text(
-          '${footer.personalCount} SMS marked personal · '
-          '${footer.unresolvedCount} unresolved',
+          footer.crossChecked
+              ? '${footer.personalCount} SMS marked personal · '
+                    '${footer.unresolvedCount} unresolved'
+              : 'SMS cross-check not active — screenshot records only',
           style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
         ),
       ],

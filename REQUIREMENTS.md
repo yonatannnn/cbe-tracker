@@ -37,7 +37,7 @@ images.
 - Saving a credit adds to the branch balance; a debit deducts.
 
 ### FR-3 Bulk screenshot upload
-- Flow: pick ONE branch → multi-select up to 10 images → sequential OCR
+- Flow: pick ONE branch → multi-select up to 50 images → sequential OCR
   with progress ("Processing 4 of 7…") → review modal.
 - Review modal rows, three states:
   1. Parsed OK — checkbox (checked by default), amount + type badge +
@@ -238,7 +238,7 @@ lib/
 1. Dashboard — total, SMS warning banner, branch cards, FAB.
 2. Add single — image → read-only parsed summary card, branch chips
    (2-col grid), Confirm, small "Edit manually" link.
-3. Bulk add — branch select → image grid (max 10) → progress bar.
+3. Bulk add — branch select → image grid (max 50) → progress bar.
 4. Bulk review modal — DraggableScrollableSheet, three row states,
    "Save N transactions".
 5. Reconcile — daily summary cards, unmatched SMS list with

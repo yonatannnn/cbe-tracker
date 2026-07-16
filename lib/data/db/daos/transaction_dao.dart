@@ -161,6 +161,74 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
     ).map((row) => row.read<int>('tx_count')).watchSingle();
   }
 
+  // ── period-scoped movement (dashboard period selector) ─────────────────────
+  //
+  // One shape for every period the dashboard offers. Each bound is optional: a
+  // null start reaches back to the first transaction and a null end runs to the
+  // present, so "all time" is just (null, null) — and movement over all time
+  // equals the running balance, which is why these subsume the old
+  // total/balance queries rather than sitting beside them. Bounds are compared
+  // with `?n IS NULL OR …` so a null variable widens the window instead of
+  // excluding every row (a direct `>= NULL` is never true in SQL).
+  //
+  // [start] is inclusive, [end] exclusive — the same half-open convention the
+  // day queries use, so a day, a week and a month tile without double-counting
+  // the boundary midnight.
+
+  /// Live credits − debits within [start, end) across NON-archived branches.
+  Stream<int> watchDeltaCentsInRange(DateTime? start, DateTime? end) {
+    return customSelect(
+      "SELECT COALESCE(SUM(CASE WHEN t.type = 'credit' "
+      'THEN t.amount_cents ELSE -t.amount_cents END), 0) AS delta '
+      'FROM transactions t JOIN branches b ON b.id = t.branch_id '
+      'WHERE b.archived = 0 '
+      'AND (?1 IS NULL OR t.transaction_date >= ?1) '
+      'AND (?2 IS NULL OR t.transaction_date < ?2)',
+      variables: [Variable<DateTime>(start), Variable<DateTime>(end)],
+      readsFrom: {transactions, branches},
+    ).map((row) => row.read<int>('delta')).watchSingle();
+  }
+
+  /// Live credits − debits within [start, end) for one branch.
+  Stream<int> watchBranchDeltaCentsInRange(
+    int branchId,
+    DateTime? start,
+    DateTime? end,
+  ) {
+    return customSelect(
+      "SELECT COALESCE(SUM(CASE WHEN type = 'credit' "
+      'THEN amount_cents ELSE -amount_cents END), 0) AS delta '
+      'FROM transactions WHERE branch_id = ?1 '
+      'AND (?2 IS NULL OR transaction_date >= ?2) '
+      'AND (?3 IS NULL OR transaction_date < ?3)',
+      variables: [
+        Variable<int>(branchId),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
+      ],
+      readsFrom: {transactions},
+    ).map((row) => row.read<int>('delta')).watchSingle();
+  }
+
+  /// Live count of a branch's transactions within [start, end).
+  Stream<int> watchBranchCountInRange(
+    int branchId,
+    DateTime? start,
+    DateTime? end,
+  ) {
+    return customSelect(
+      'SELECT COUNT(*) AS tx_count FROM transactions WHERE branch_id = ?1 '
+      'AND (?2 IS NULL OR transaction_date >= ?2) '
+      'AND (?3 IS NULL OR transaction_date < ?3)',
+      variables: [
+        Variable<int>(branchId),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
+      ],
+      readsFrom: {transactions},
+    ).map((row) => row.read<int>('tx_count')).watchSingle();
+  }
+
   /// Branch transactions ordered newest-first (day-grouping friendly, §FR-7).
   Stream<List<Transaction>> watchTransactionsForBranch(int branchId) {
     return (select(transactions)

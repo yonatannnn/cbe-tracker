@@ -52,7 +52,14 @@ class NotificationService {
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: DarwinInitializationSettings(),
+        // request* default to TRUE, which pops iOS's permission dialog at
+        // first cold open with zero context. Permission is asked exactly once,
+        // from the reminder toggle, where the user can see why.
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        ),
       ),
       onDidReceiveNotificationResponse: (response) =>
           onTap?.call(response.payload),
@@ -88,7 +95,8 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin
         >();
-    return await ios?.requestPermissions(alert: true, badge: true) ?? false;
+    return await ios?.requestPermissions(alert: true, badge: true, sound: true) ??
+        false;
   }
 
   /// Schedules (or reschedules) the daily reminder.

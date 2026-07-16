@@ -1,5 +1,5 @@
 name: cbe_tracker
-description: "A new Flutter project."
+description: "CBE Tracker — per-branch balances from CBE screenshots, cross-checked against CBE SMS."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -49,6 +49,19 @@ dependencies:
   decimal: ^3.2.4
   google_generative_ai: ^0.4.7
   timezone: ^0.11.1
+  archive: ^4.0.9
+  # Picks the zip to restore from. file_selector rather than file_picker:
+  # file_picker 11 pins win32 ^5 while share_plus 13 needs ^6, and it exports
+  # its Windows implementation on every non-web platform — so no override can
+  # fix it, the Android build compiles that Windows code and fails. Verified:
+  # `flutter build apk` errored in file_picker_windows.dart. file_selector is
+  # first-party and its Windows support is a C++ plugin, so it pulls no win32.
+  file_selector: ^1.1.0
+  # Phase 10 cloud backup: uploads the local backup zip to Supabase Storage,
+  # gated behind email/password sign-in. Beyond §5, approved for this phase.
+  # Dormant unless SUPABASE_URL/SUPABASE_KEY are passed at build time, so a
+  # plain build stays fully local. Verified `flutter build apk` compiles clean.
+  supabase_flutter: ^2.16.0
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +75,17 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   drift_dev: ^2.34.0
   build_runner: ^2.15.1
+
+  # Test-only: the backup round-trip test fakes the documents/temp directories,
+  # which path_provider has no implementation for under `flutter test`. Both
+  # already arrive transitively via path_provider; declared so a future version
+  # bump can't remove them out from under the tests.
+  path_provider_platform_interface: ^2.1.0
+  plugin_platform_interface: ^2.1.0
+  # Test-only, same pattern: the confirm-screen widget test fakes the image
+  # picker (no platform channel under `flutter test`). Arrives transitively via
+  # image_picker.
+  image_picker_platform_interface: ^2.10.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -87,6 +111,11 @@ flutter:
         - asset: assets/fonts/DejaVuSans.ttf
         - asset: assets/fonts/DejaVuSans-Bold.ttf
           weight: 700
+    # References render identically on every device — 'monospace' resolves to
+    # whatever the phone happens to ship.
+    - family: DejaVuSansMono
+      fonts:
+        - asset: assets/fonts/DejaVuSansMono.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

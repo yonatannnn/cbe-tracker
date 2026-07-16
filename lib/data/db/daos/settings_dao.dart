@@ -14,6 +14,8 @@ class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin 
   static const _lastBranchKey = 'last_branch_id';
   static const _smsStateKey = 'sms_permission_state';
   static const _reminderKey = 'report_reminder_time';
+  static const _reminderLastKey = 'report_reminder_time_last';
+  static const _cloudBackupKey = 'cloud_last_backup';
 
   Future<String?> _get(String key) async {
     final row = await (select(
@@ -76,8 +78,34 @@ class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin 
 
   Future<String?> getReminderTime() async => _get(_reminderKey);
 
-  Future<void> setReminderTime(String? value) =>
-      _set(_reminderKey, value ?? 'off');
+  /// Switching off remembers the time it had, so switching back on restores
+  /// her 20:00 instead of silently resetting to the 18:00 default.
+  Future<void> setReminderTime(String? value) async {
+    if (value == null) {
+      final current = await _get(_reminderKey);
+      if (current != null && current != 'off') {
+        await _set(_reminderLastKey, current);
+      }
+      await _set(_reminderKey, 'off');
+      return;
+    }
+    await _set(_reminderKey, value);
+  }
+
+  /// The time the reminder had before it was last switched off ("HH:mm").
+  Future<String?> getLastReminderTime() => _get(_reminderLastKey);
+
+  /// When the last successful cloud backup completed, or null if never.
+  ///
+  /// Stored as ISO-8601; the automatic upload compares it against now to decide
+  /// whether a fresh backup is due (Phase 10).
+  Future<DateTime?> getLastCloudBackup() async {
+    final raw = await _get(_cloudBackupKey);
+    return raw == null ? null : DateTime.tryParse(raw);
+  }
+
+  Future<void> setLastCloudBackup(DateTime when) =>
+      _set(_cloudBackupKey, when.toIso8601String());
 }
 
 /// Tri-state so "never asked" is distinguishable from granted/skipped.

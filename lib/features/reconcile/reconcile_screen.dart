@@ -1,6 +1,8 @@
 /// Reconcile tab — "in SMS but not in screenshots" (§8 Phase 6, FR-5).
 library;
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,7 +34,36 @@ class ReconcileScreen extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Sync CBE messages',
-              onPressed: () => ref.read(smsServiceProvider).syncInbox(),
+              // Reading the whole inbox takes seconds; fire-and-forget left the
+              // tap with no spinner, no result and swallowed errors — a broken
+              // sync looked identical to "everything matched", the single most
+              // dangerous wrong answer this screen can give.
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  final stored = await ref.read(smsServiceProvider).syncInbox();
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        stored == 0
+                            ? 'Up to date — no new CBE messages'
+                            : stored == 1
+                            ? 'Found 1 new CBE message'
+                            : 'Found $stored new CBE messages',
+                      ),
+                    ),
+                  );
+                } on Object {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        "Couldn't read the inbox — check SMS permission "
+                        'in system settings.',
+                      ),
+                    ),
+                  );
+                }
+              },
             ),
         ],
       ),
@@ -114,18 +145,21 @@ class _DayView extends ConsumerWidget {
         const SizedBox(height: 12),
         Row(
           children: [
+            // '—' until the day's counts actually arrive: this provider
+            // re-keys on every day change, and a hard 0 during that reload
+            // reads as "no SMS that day", which is a different claim entirely.
             Expanded(
               child: _SummaryCard(
                 label: 'SMS received',
-                value: '${counts?.received ?? 0}',
+                value: counts == null ? '—' : '${counts.received}',
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _SummaryCard(
                 label: 'Matched',
-                value: '${counts?.matched ?? 0}',
-                color: const Color(0xFF1B7A43),
+                value: counts == null ? '—' : '${counts.matched}',
+                color: AppColors.credit,
               ),
             ),
           ],
@@ -274,7 +308,7 @@ class _UnmatchedRow extends ConsumerWidget {
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w500,
                     color: isCredit
-                        ? const Color(0xFF1B7A43)
+                        ? AppColors.credit
                         : theme.colorScheme.error,
                   ),
                 ),
@@ -321,7 +355,15 @@ class _UnmatchedRow extends ConsumerWidget {
   /// Creates a real transaction from the SMS data and links it (§FR-5).
   Future<void> _addToBranch(BuildContext context, WidgetRef ref) async {
     final branches = ref.read(activeBranchesProvider).value ?? const <Branch>[];
-    if (branches.isEmpty) return;
+    if (branches.isEmpty) {
+      // .value is also null while the stream is still loading, so this is
+      // reachable on a cold start onto this tab. Silently doing nothing reads
+      // as a broken button; say something instead.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No branches loaded yet — try again.')),
+      );
+      return;
+    }
 
     final branch = await showModalBottomSheet<Branch>(
       context: context,
@@ -351,7 +393,7 @@ class _UnmatchedRow extends ConsumerWidget {
 
     final txDao = ref.read(transactionDaoProvider);
     final reference = sms.reference ?? manualReference();
-    await txDao.insertIfNew(
+    final result = await txDao.insertIfNew(
       TransactionsCompanion.insert(
         branchId: branch.id,
         amountCents: sms.amountCents,
@@ -367,9 +409,19 @@ class _UnmatchedRow extends ConsumerWidget {
     await ref.read(reconcileServiceProvider).reconcile();
 
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Added to ${branch.name}')));
+    // insertIfNew reports a duplicate rather than throwing, and this used to
+    // discard that and claim success either way — telling her a payment had
+    // been filed when the ledger was untouched. The single-add flow blocks on
+    // the same collision; the least this can do is not lie about it.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result == InsertResult.duplicate
+              ? 'Already recorded — nothing added'
+              : 'Added to ${branch.name}',
+        ),
+      ),
+    );
   }
 
   Future<void> _ignore(BuildContext context, WidgetRef ref) async {
@@ -409,15 +461,26 @@ class _UnmatchedRow extends ConsumerWidget {
     await dao.setIgnored(sms.id, true);
     if (!context.mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Marked personal'),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () => dao.setIgnored(sms.id, false),
+    // persist defaults to `action != null` (Flutter 3.44, snack_bar.dart), so
+    // an Undo bar stays on screen forever unless told otherwise — and this one
+    // has no close icon, leaving Undo itself as the only way to dismiss it.
+    // Tapping the only exit would reverse the choice she just made, so it must
+    // time out on its own.
+    //
+    // hideCurrentSnackBar first because these queue: marking four messages
+    // personal in a row otherwise means sixteen seconds of stacked bars.
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('Marked personal'),
+          persist: false,
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => unawaited(dao.setIgnored(sms.id, false)),
+          ),
         ),
-      ),
-    );
+      );
   }
 }
 

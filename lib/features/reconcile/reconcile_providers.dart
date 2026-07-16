@@ -45,9 +45,15 @@ final reconcileDayProvider = NotifierProvider<ReconcileDay, DateTime>(
 
 /// Count of today's unmatched, un-ignored SMS — drives the dashboard banner.
 /// Replaces the Phase 3 stub that always returned 0.
-final unmatchedSmsCountProvider = StreamProvider<int>(
-  (ref) => ref.watch(smsDaoProvider).watchUnmatchedCountForDay(DateTime.now()),
-);
+///
+/// Watches [todayProvider] rather than capturing `DateTime.now()` once: the
+/// banner is the app's headline claim ("every CBE message today has a
+/// screenshot"), and left frozen at launch it evaluated that against yesterday
+/// every midnight, hiding the day's real unmatched payments.
+final unmatchedSmsCountProvider = StreamProvider<int>((ref) {
+  final today = ref.watch(todayProvider);
+  return ref.watch(smsDaoProvider).watchUnmatchedCountForDay(today);
+});
 
 /// Unmatched SMS for the selected day — the reconcile list.
 final unmatchedSmsForDayProvider = StreamProvider<List<SmsTransaction>>(
@@ -72,6 +78,17 @@ final smsCountsForDayProvider = FutureProvider<DayCounts>((ref) {
       .countsForDay(ref.watch(reconcileDayProvider));
 });
 
+/// Whether the SMS cross-check is actually running: an Android device AND
+/// permission granted. Every surface that claims "verified" or "all clear"
+/// must check this first — on iOS, or after "skip, screenshots only", those
+/// claims would describe a check that structurally never runs, and a false
+/// green tick is the most dangerous thing this app can show.
+final smsCrossCheckActiveProvider = Provider<bool>((ref) {
+  if (!ref.watch(smsServiceProvider).isSupported) return false;
+  return ref.watch(smsPermissionStateProvider).value ==
+      SmsPermissionState.granted;
+});
+
 /// Where the user got to with the SMS permission: unasked / granted / skipped.
 final smsPermissionStateProvider = StreamProvider<SmsPermissionState>(
   (ref) => ref.watch(settingsDaoProvider).watchSmsPermissionState(),
@@ -80,10 +97,10 @@ final smsPermissionStateProvider = StreamProvider<SmsPermissionState>(
 /// Whether a screenshot's reference already has a matching CBE SMS — shows the
 /// "Verified against SMS" line on the confirm screen. Replaces the Phase 4
 /// stub that always returned null.
-final smsVerifiedProvider = FutureProvider.family<SmsTransaction?, String?>((
-  ref,
-  reference,
-) async {
-  if (reference == null || reference.isEmpty) return null;
-  return ref.watch(smsDaoProvider).findByReference(reference);
-});
+/// autoDispose: keyed by reference STRING — without it every reference ever
+/// confirmed stays cached for the whole session.
+final smsVerifiedProvider = FutureProvider.autoDispose
+    .family<SmsTransaction?, String?>((ref, reference) async {
+      if (reference == null || reference.isEmpty) return null;
+      return ref.watch(smsDaoProvider).findByReference(reference);
+    });

@@ -43,7 +43,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
     setState(() => _images.addAll(accepted.map((x) => File(x.path))));
 
     if (dropped > 0) {
-      // §FR-3: keep the first 10, say what happened.
+      // §FR-3: keep the first [maxImages], say what happened.
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

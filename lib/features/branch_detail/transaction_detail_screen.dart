@@ -2,8 +2,6 @@
 /// (§FR-7).
 library;
 
-import 'dart:io';
-
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,10 +12,10 @@ import '../../core/money/etb_format.dart';
 import '../../core/parser/cbe_parser.dart';
 import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
+import '../../services/service_providers.dart';
 import '../reconcile/reconcile_providers.dart';
 import '../shared/manual_entry_fields.dart';
 import 'branch_detail_providers.dart';
-import 'branch_detail_screen.dart' show kCreditGreen;
 
 class TransactionDetailScreen extends ConsumerWidget {
   const TransactionDetailScreen({super.key, required this.transactionId});
@@ -63,6 +61,19 @@ class _BodyState extends ConsumerState<_Body> {
 
   Transaction get _tx => widget.row.transaction;
 
+  /// Throws away an abandoned edit.
+  ///
+  /// The buffer fields are `late` initialisers, so they seed once and never
+  /// again. Without this, cancelling kept the typed-but-rejected values: the
+  /// header would show the stored 5,000.00 while re-opening Edit offered the
+  /// abandoned 50,000.00, and Save would commit it as real money.
+  void _resetBuffer() {
+    _cents = _tx.amountCents;
+    _type = _tx.type;
+    _reference = _tx.reference;
+    _branchId = _tx.branchId;
+  }
+
   Future<void> _save() async {
     final cents = _cents;
     if (cents == null || cents == 0) {
@@ -85,10 +96,17 @@ class _BodyState extends ConsumerState<_Body> {
           branchId: Value(_branchId),
         ),
       );
-    } on Object {
-      // The reference is UNIQUE — another transaction already has this one.
+    } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _error = 'Another transaction already uses that reference');
+      // Only a UNIQUE violation means the reference is taken. Blaming the
+      // reference for every failure (FK violation, disk full…) sends her to
+      // "fix" a field that isn't broken.
+      final text = '$error'.toUpperCase();
+      setState(
+        () => _error = text.contains('UNIQUE')
+            ? 'Another transaction already uses that reference'
+            : "Couldn't save the changes. Nothing was updated.",
+      );
       return;
     }
 
@@ -153,7 +171,7 @@ class _BodyState extends ConsumerState<_Body> {
         Text(
           formatSignedCents(signed),
           style: AppTextStyles.money.copyWith(
-            color: isCredit ? kCreditGreen : theme.colorScheme.error,
+            color: isCredit ? AppColors.credit : theme.colorScheme.error,
           ),
         ),
         const SizedBox(height: 12),
@@ -176,7 +194,7 @@ class _BodyState extends ConsumerState<_Body> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                const Icon(Icons.verified, size: 16, color: kCreditGreen),
+                const Icon(Icons.verified, size: 16, color: AppColors.credit),
                 const SizedBox(width: 6),
                 Text(
                   'Verified against SMS, '
@@ -242,6 +260,15 @@ class _BodyState extends ConsumerState<_Body> {
             items: [
               for (final branch in branches)
                 DropdownMenuItem(value: branch.id, child: Text(branch.name)),
+              // A transaction can belong to a branch that was archived since.
+              // The dropdown asserts that its value appears in items, so
+              // without this entry, editing such a transaction crashes — and
+              // silently reassigning it to some active branch would move money.
+              if (!branches.any((b) => b.id == _branchId))
+                DropdownMenuItem(
+                  value: _branchId,
+                  child: const Text('Archived branch'),
+                ),
             ],
             // Changing this moves the transaction; both balances restream.
             onChanged: (id) => setState(() => _branchId = id ?? _branchId),
@@ -252,6 +279,7 @@ class _BodyState extends ConsumerState<_Body> {
             onPressed: () => setState(() {
               _editing = false;
               _error = null;
+              _resetBuffer();
             }),
             child: const Text('Cancel'),
           ),
@@ -289,13 +317,18 @@ class _BodyState extends ConsumerState<_Body> {
   }
 }
 
-class _FullScreenshot extends StatelessWidget {
+class _FullScreenshot extends ConsumerWidget {
   const _FullScreenshot({required this.path});
 
   final String path;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Relative to the documents dir (§2); resolved against wherever the app is
+    // installed right now.
+    final file = ref.watch(imageStoreProvider).resolve(path);
+    if (file == null) return const SizedBox.shrink();
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: ConstrainedBox(
@@ -303,7 +336,7 @@ class _FullScreenshot extends StatelessWidget {
         child: InteractiveViewer(
           maxScale: 5,
           child: Image.file(
-            File(path),
+            file,
             fit: BoxFit.contain,
             errorBuilder: (context, _, _) => Container(
               height: 160,

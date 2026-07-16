@@ -25,19 +25,6 @@ import '../reconcile/reconcile_providers.dart';
 import '../shared/branch_chips.dart';
 import '../shared/manual_entry_fields.dart';
 
-/// Add tab (§8 Phase 4, FR-2). Placeholder for Phase 0.
-class AddScreen extends StatelessWidget {
-  const AddScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Add')),
-      body: const Center(child: Text('Add')),
-    );
-  }
-}
-
 /// Picks a screenshot, runs the parse pipeline, and confirms the result.
 class AddSingleScreen extends ConsumerStatefulWidget {
   const AddSingleScreen({super.key});
@@ -52,7 +39,13 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
   bool _busy = true;
   int? _selectedBranchId;
   bool _manualOpen = false;
-  String? _duplicateDate;
+
+  /// The already-recorded transaction a blocked save collided with (§FR-2).
+  ///
+  /// The id is what "View existing" opens. Both fields are null only when the
+  /// row vanished between the insert and the lookup — she still has to be told
+  /// it's a duplicate, which matters more than being able to open it.
+  ({int? id, String? date})? _duplicate;
 
   // Manual-edit values, pre-filled from the parse when there is one.
   int? _manualCents;
@@ -70,18 +63,36 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
     setState(() {
       _busy = true;
       _outcome = null;
-      _duplicateDate = null;
+      _duplicate = null;
     });
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null) {
-      // Cancelled the picker — leave the flow entirely.
-      if (mounted && context.canPop()) context.pop();
+      // Cancelled the picker — leave the flow entirely. Clearing _busy matters
+      // for the case where there's nothing to pop back to: the screen would
+      // otherwise sit on the spinner with no picker and no way forward.
+      if (!mounted) return;
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        setState(() => _busy = false);
+      }
       return;
     }
     final file = File(picked.path);
     setState(() => _image = file);
 
-    final outcome = await ref.read(parsePipelineProvider).parse(file);
+    // ML Kit throws on a format it can't decode, and on a fresh phone that has
+    // never had network it throws because the model isn't downloaded yet — a
+    // real first-run in Ethiopia. Unguarded, that left "Reading screenshot…"
+    // spinning forever with no retry and no explanation. Treat any failure as
+    // unreadable, which is the state that already offers "Try another image"
+    // and "Enter manually".
+    ParseOutcome outcome;
+    try {
+      outcome = await ref.read(parsePipelineProvider).parse(file);
+    } on Object {
+      outcome = const ParseUnreadable('');
+    }
     if (!mounted) return;
     setState(() {
       _outcome = outcome;
@@ -135,6 +146,14 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
     final parsed = outcome is ParseSuccess ? outcome.parsed : null;
     final dao = ref.read(transactionDaoProvider);
 
+    // image_picker's file lives in the cache, which Android deletes at will.
+    // Copy it somewhere durable before the row points at it (§2).
+    final image = _image;
+    final storedPath = image == null
+        ? null
+        : await ref.read(imageStoreProvider).save(image);
+    if (!mounted) return;
+
     final result = await dao.insertIfNew(
       TransactionsCompanion.insert(
         branchId: branchId,
@@ -143,24 +162,30 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
         reference: entry.reference,
         source: TxSource.screenshot,
         transactionDate: parsed?.date ?? DateTime.now(),
-        screenshotPath: Value(_image?.path),
+        screenshotPath: Value(storedPath),
         ocrText: Value(parsed?.rawText ?? _rawText()),
       ),
     );
 
-    if (!mounted) return;
-
     if (result == InsertResult.duplicate) {
+      // The image was copied to durable storage before the insert, and a
+      // blocked save means no row will ever point at it. Deleted before the
+      // mounted check on purpose: whether she happened to leave the screen
+      // must not decide whether ~100KB leaks into every backup from here on.
+      await ref.read(imageStoreProvider).delete(storedPath);
       // §FR-2: block the save and say when it was first recorded.
       final existing = await dao.findByReference(entry.reference);
       if (!mounted) return;
       setState(
-        () => _duplicateDate = existing == null
-            ? null
-            : _formatDate(existing.transactionDate),
+        () => _duplicate = (
+          id: existing?.id,
+          date: existing == null ? null : _formatDate(existing.transactionDate),
+        ),
       );
       return;
     }
+
+    if (!mounted) return;
 
     await ref.read(settingsDaoProvider).setLastBranchId(branchId);
     // A CBE SMS for this transaction may already be waiting (§FR-5).
@@ -183,6 +208,18 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Saved to $name')));
+    // The picker's cache copy served its purpose — the durable copy is in the
+    // documents dir and the row points there. Left behind, every add grew the
+    // app's cache by ~100KB forever. Best-effort; only after a committed save,
+    // since a blocked duplicate still shows this file on screen.
+    if (image != null) {
+      try {
+        await image.delete();
+      } on FileSystemException {
+        // Android may have purged it already.
+      }
+    }
+    if (!mounted) return;
     if (context.canPop()) context.pop();
   }
 
@@ -245,8 +282,8 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
         ),
         const SizedBox(height: 16),
         if (_manualOpen) _buildManualFields(),
-        if (_duplicateDate != null)
-          _DuplicateNotice(date: _duplicateDate!)
+        if (_duplicate != null)
+          _DuplicateNotice(duplicate: _duplicate!)
         else ...[
           FilledButton(
             onPressed: _selectedBranchId == null ? null : _confirm,
@@ -316,8 +353,8 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
           ),
           const SizedBox(height: 16),
           _buildManualFields(),
-          if (_duplicateDate != null)
-            _DuplicateNotice(date: _duplicateDate!)
+          if (_duplicate != null)
+            _DuplicateNotice(duplicate: _duplicate!)
           else
             FilledButton(
               onPressed: _selectedBranchId == null ? null : _confirm,
@@ -361,7 +398,7 @@ class _SummaryCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final isCredit = parsed.type == TxType.credit;
     final signed = isCredit ? parsed.amountCents : -parsed.amountCents;
-    final color = isCredit ? const Color(0xFF1B7A43) : theme.colorScheme.error;
+    final color = isCredit ? AppColors.credit : theme.colorScheme.error;
     final smsVerified = ref.watch(smsVerifiedProvider(parsed.reference)).value;
 
     return Card(
@@ -424,7 +461,7 @@ class _SummaryCard extends ConsumerWidget {
                   const Icon(
                     Icons.verified,
                     size: 16,
-                    color: Color(0xFF1B7A43),
+                    color: AppColors.credit,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -451,22 +488,21 @@ class _AiBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const amber = Color(0xFF8A5A00);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF3D6),
+        color: AppColors.pendingWash,
         borderRadius: BorderRadius.circular(8),
       ),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.auto_awesome, size: 14, color: amber),
+          Icon(Icons.auto_awesome, size: 14, color: AppColors.pending),
           SizedBox(width: 6),
           Flexible(
             child: Text(
               'Read with AI — please check the amount',
-              style: TextStyle(color: amber, fontSize: 12),
+              style: TextStyle(color: AppColors.pending, fontSize: 12),
             ),
           ),
         ],
@@ -534,9 +570,9 @@ class _Thumbnail extends StatelessWidget {
 
 /// Replaces the confirm button when the reference is already recorded.
 class _DuplicateNotice extends StatelessWidget {
-  const _DuplicateNotice({required this.date});
+  const _DuplicateNotice({required this.duplicate});
 
-  final String date;
+  final ({int? id, String? date}) duplicate;
 
   @override
   Widget build(BuildContext context) {
@@ -556,23 +592,25 @@ class _DuplicateNotice extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Already recorded on $date',
+                  duplicate.date == null
+                      ? 'Already recorded'
+                      : 'Already recorded on ${duplicate.date}',
                   style: TextStyle(color: scheme.onErrorContainer),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 8),
-        OutlinedButton(
-          // Real transaction detail arrives in Phase 7.
-          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Transaction detail arrives in Phase 7'),
-            ),
+        // No id means the row it collided with couldn't be read back, so there
+        // is nothing to open — the notice stands on its own rather than
+        // offering a button that would go nowhere.
+        if (duplicate.id case final id?) ...[
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () => context.push('/transaction/$id'),
+            child: const Text('View existing'),
           ),
-          child: const Text('View existing'),
-        ),
+        ],
       ],
     );
   }

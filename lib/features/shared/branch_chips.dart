@@ -25,11 +25,34 @@ class BranchChips extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final branches = ref.watch(activeBranchesProvider).value ?? const <Branch>[];
+    final async = ref.watch(activeBranchesProvider);
     final lastUsed = ref.watch(lastBranchIdProvider).value;
 
+    // Distinguish "still loading" from "truly none": `.value ?? []` flashed the
+    // no-branches message during the stream's first moments, telling a user
+    // with five branches she had none.
+    if (async.isLoading && !async.hasValue) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    if (async.hasError && !async.hasValue) {
+      return const Text("Couldn't load branches. Close and reopen this screen.");
+    }
+    final branches = async.value ?? const <Branch>[];
+
     if (branches.isEmpty) {
-      return const Text('No branches yet — add one from the dashboard.');
+      // Branches are managed in Settings, not the dashboard.
+      return const Text(
+        'No branches yet — add one in Settings → Manage branches.',
+      );
     }
 
     // Pre-select the most recently used branch, else the first one.

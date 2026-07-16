@@ -1,8 +1,6 @@
 /// Branch detail: balance, today's in/out, day-grouped history (§FR-7).
 library;
 
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,11 +11,11 @@ import '../../core/parser/cbe_parser.dart';
 import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
+import '../../services/service_providers.dart';
+import '../reconcile/reconcile_providers.dart';
 import 'branch_detail_providers.dart';
 import 'day_grouping.dart';
 
-/// Green for money in; money out uses the scheme's error colour.
-const Color kCreditGreen = Color(0xFF1B7A43);
 
 class BranchDetailScreen extends ConsumerWidget {
   const BranchDetailScreen({super.key, required this.branchId});
@@ -134,23 +132,39 @@ class _Body extends ConsumerWidget {
       now: DateTime.now(),
     );
 
-    // Flatten to a single index space so the whole history can be a
-    // ListView.builder — a Column would build every row up front.
+    // Flatten to a single index space so a long history can be a
+    // ListView.builder — a Column would build every day up front. Each day's
+    // rows travel together as one entry, because they share one bordered card:
+    // the eye runs down a continuous ledger instead of hopping between
+    // floating cards.
     final flat = <Object>[];
     for (final section in sections) {
       flat.add(section.label);
-      flat.addAll(section.items);
+      flat.add(section.items);
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-      // +1 for the summary card pinned at the top of the scroll.
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.sm,
+        AppSpacing.lg,
+        AppSpacing.xl,
+      ),
+      // +1 for the balance panel at the top of the scroll.
       itemCount: flat.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) return _SummaryCard(branchId: branchId);
         final entry = flat[index - 1];
         if (entry is String) return _DayHeader(label: entry);
-        return _TransactionRow(row: entry as TransactionWithSms);
+        final day = entry as List<TransactionWithSms>;
+        return Card(
+          child: Column(
+            children: [
+              for (var i = 0; i < day.length; i++)
+                _TransactionRow(row: day[i], isLast: i == day.length - 1),
+            ],
+          ),
+        );
       },
     );
   }
@@ -163,44 +177,47 @@ class _SummaryCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final balance = ref.watch(branchBalanceCentsProvider(branchId));
     final today = ref.watch(branchTodaySummaryProvider(branchId)).value;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Current balance', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 6),
-            Text(
-              balance.maybeWhen(data: formatCents, orElse: () => '—'),
-              style: AppTextStyles.money,
+    final cents = balance.value;
+
+    // Not a card — same reasoning as the dashboard total: the branch's balance
+    // IS this page, not an item on it.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('CURRENT BALANCE', style: AppTextStyles.label),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            cents == null ? '—' : formatCents(cents),
+            style: AppTextStyles.money.copyWith(
+              color: (cents ?? 0) < 0 ? AppColors.debit : AppColors.ink,
             ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _TodayFigure(
-                    label: 'In today',
-                    cents: today?.creditedCents ?? 0,
-                    color: kCreditGreen,
-                  ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              Expanded(
+                child: _TodayFigure(
+                  label: 'IN TODAY',
+                  cents: today?.creditedCents ?? 0,
+                  color: AppColors.credit,
                 ),
-                Expanded(
-                  child: _TodayFigure(
-                    label: 'Out today',
-                    cents: today?.debitedCents ?? 0,
-                    color: theme.colorScheme.error,
-                  ),
+              ),
+              Container(width: 1, height: 34, color: AppColors.line),
+              Expanded(
+                child: _TodayFigure(
+                  label: 'OUT TODAY',
+                  cents: today?.debitedCents ?? 0,
+                  color: AppColors.debit,
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -219,22 +236,16 @@ class _TodayFigure extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.outline,
-          ),
-        ),
-        const SizedBox(height: 2),
+        Text(label, style: AppTextStyles.label.copyWith(fontSize: 10)),
+        const SizedBox(height: AppSpacing.xs),
         Text(
           formatCents(cents),
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w500,
+          style: AppTextStyles.moneyRow.copyWith(
+            // A zero is not news; dim it so a real figure stands out.
+            color: cents == 0 ? AppColors.muted : color,
           ),
         ),
       ],
@@ -249,29 +260,24 @@ class _DayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 12, 0, 6),
-      child: Text(
-        label.toUpperCase(),
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.outline,
-          letterSpacing: 0.8,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      padding: const EdgeInsets.fromLTRB(2, AppSpacing.xl, 0, AppSpacing.sm),
+      child: Text(label.toUpperCase(), style: AppTextStyles.label),
     );
   }
 }
 
-class _TransactionRow extends StatelessWidget {
-  const _TransactionRow({required this.row});
+class _TransactionRow extends ConsumerWidget {
+  const _TransactionRow({required this.row, required this.isLast});
 
   final TransactionWithSms row;
 
+  /// Rows share one bordered card per day, so only the last one skips its
+  /// divider — a continuous ledger rather than a stack of floating cards.
+  final bool isLast;
+
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget build(BuildContext context, WidgetRef ref) {
     final tx = row.transaction;
     final isCredit = tx.type == TxType.credit;
     final signed = isCredit ? tx.amountCents : -tx.amountCents;
@@ -280,71 +286,82 @@ class _TransactionRow extends StatelessWidget {
     final time =
         '${two(tx.transactionDate.hour)}:${two(tx.transactionDate.minute)}';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => context.push('/transaction/${tx.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              _Thumbnail(path: tx.screenshotPath, source: tx.source),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => context.push('/transaction/${tx.id}'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.md,
+            ),
+            child: Row(
+              children: [
+                _Thumbnail(path: tx.screenshotPath, source: tx.source),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        formatSignedCents(signed),
+                        style: AppTextStyles.moneyRow.copyWith(
+                          color: isCredit ? AppColors.credit : AppColors.debit,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        tx.reference,
+                        style: AppTextStyles.mono.copyWith(
+                          fontSize: 10,
+                          color: AppColors.muted,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                // The verification column. Every row reports its state in the
+                // same place, so a GAP in the column is what catches the eye —
+                // that gap is a payment with no CBE message behind it. Only
+                // meaningful while the cross-check runs: on iOS or with SMS
+                // skipped every row would show the gap, turning a signal into
+                // permanent noise.
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      formatSignedCents(signed),
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: isCredit ? kCreditGreen : theme.colorScheme.error,
+                    if (ref.watch(smsCrossCheckActiveProvider))
+                      Icon(
+                        row.isVerified ? Icons.verified : Icons.remove,
+                        size: 14,
+                        color: row.isVerified
+                            ? AppColors.credit
+                            : AppColors.line,
                       ),
-                    ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
-                      tx.reference,
-                      style: AppTextStyles.mono.copyWith(
+                      time,
+                      style: const TextStyle(
                         fontSize: 11,
-                        color: theme.colorScheme.outline,
+                        color: AppColors.muted,
+                        fontFeatures: [FontFeature.tabularFigures()],
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  // Verified = a CBE SMS corroborates this screenshot.
-                  Icon(
-                    row.isVerified ? Icons.verified : Icons.verified_outlined,
-                    size: 16,
-                    color: row.isVerified
-                        ? kCreditGreen
-                        : theme.colorScheme.outlineVariant,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    time,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
+        if (!isLast) const Divider(indent: 68),
+      ],
     );
   }
 }
 
 /// Screenshot thumbnail, or a source-appropriate icon when there is none
 /// (SMS-created and manual rows have no image).
-class _Thumbnail extends StatelessWidget {
+class _Thumbnail extends ConsumerWidget {
   const _Thumbnail({required this.path, required this.source});
 
   final String? path;
@@ -353,10 +370,13 @@ class _Thumbnail extends StatelessWidget {
   static const double _size = 44;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
+    // Stored paths are relative to the documents dir (§2), so they survive the
+    // reinstall or restore that changes the app's absolute sandbox path.
+    final file = ref.watch(imageStoreProvider).resolve(path);
 
-    if (path == null || path!.isEmpty) {
+    if (file == null) {
       return Container(
         width: _size,
         height: _size,
@@ -375,7 +395,7 @@ class _Thumbnail extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Image.file(
-        File(path!),
+        file,
         width: _size,
         height: _size,
         fit: BoxFit.cover,

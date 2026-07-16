@@ -4,9 +4,13 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme.dart';
 import '../../data/db/database_provider.dart';
 import '../../services/notification_service.dart';
+import '../../services/supabase_config.dart';
 import '../reports/reports_providers.dart';
+import 'backup_section.dart';
+import 'cloud_backup_section.dart';
 import 'manage_branches_sheet.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -52,14 +56,33 @@ class SettingsScreen extends ConsumerWidget {
               ),
               onTap: () => _pickTime(context, ref, reminder),
             ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.xs,
+              AppSpacing.lg,
+              AppSpacing.lg,
+            ),
             child: Text(
               'A notification at the end of the day, so a branch never goes '
               'unreported.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: AppTextStyles.label.copyWith(
+                letterSpacing: 0,
+                height: 1.45,
+                fontWeight: FontWeight.w400,
+              ),
             ),
           ),
+          const Divider(),
+          const _SectionHeader('Backup'),
+          const BackupSection(),
+          // Only when a Supabase project was wired in at build time; otherwise
+          // the whole cloud feature stays hidden.
+          if (SupabaseConfig.isConfigured) ...[
+            const Divider(),
+            const _SectionHeader('Cloud backup'),
+            const CloudBackupSection(),
+          ],
         ],
       ),
     );
@@ -90,8 +113,12 @@ class SettingsScreen extends ConsumerWidget {
       );
       return;
     }
-    await settings.setReminderTime(ReminderTime.defaultTime.stored);
-    await notifications.scheduleDaily(ReminderTime.defaultTime);
+    // Restore the time she had before switching off; 18:00 only on first use.
+    final saved =
+        ReminderTime.parse(await settings.getLastReminderTime()) ??
+        ReminderTime.defaultTime;
+    await settings.setReminderTime(saved.stored);
+    await notifications.scheduleDaily(saved);
   }
 
   Future<void> _pickTime(
@@ -118,17 +145,16 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    // Same quiet grey label as every other section header in the app — green
+    // headers here would spend the colour that means "credit" everywhere else.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: Text(
-        label.toUpperCase(),
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.primary,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
-        ),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.lg,
+        AppSpacing.lg,
+        AppSpacing.xs,
       ),
+      child: Text(label.toUpperCase(), style: AppTextStyles.label),
     );
   }
 }

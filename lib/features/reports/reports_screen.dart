@@ -10,10 +10,9 @@ import '../../core/money/etb_format.dart';
 import '../../core/parser/cbe_parser.dart';
 import '../../data/db/database.dart';
 import '../../services/report_service.dart';
+import '../reconcile/reconcile_providers.dart';
 import 'reports_providers.dart';
 
-const Color _creditGreen = Color(0xFF1B7A43);
-const Color _amber = Color(0xFF8A5A00);
 
 class ReportsScreen extends ConsumerWidget {
   const ReportsScreen({super.key});
@@ -58,9 +57,20 @@ class _BodyState extends ConsumerState<_Body> {
           text: 'Branch report — ${_longDate(_report.day)}',
         ),
       );
+    } on Object {
+      // Building the PDF loads fonts, writes a temp file and crosses a platform
+      // channel — any of which can fail. Without this the exception went to the
+      // console and she saw only the spinner blink: the report she needs at
+      // closing time appears to do nothing, forever.
+      _say("Couldn't build the report. Try again.");
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
+  }
+
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _sharePerBranch() async {
@@ -88,6 +98,8 @@ class _BodyState extends ConsumerState<_Body> {
           text: 'Per-branch reports — ${_longDate(_report.day)}',
         ),
       );
+    } on Object {
+      _say("Couldn't build the reports. Try again.");
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
@@ -120,10 +132,14 @@ class _BodyState extends ConsumerState<_Body> {
                   ),
                 ),
               const SizedBox(height: 8),
-              // §FR-6 footer line.
+              // §FR-6 footer line. When the cross-check never ran, "0
+              // unresolved" would read as a clean bill of health — say so
+              // honestly instead.
               Text(
-                '${_report.footer.personalCount} SMS marked personal · '
-                '${_report.footer.unresolvedCount} unresolved',
+                _report.footer.crossChecked
+                    ? '${_report.footer.personalCount} SMS marked personal · '
+                          '${_report.footer.unresolvedCount} unresolved'
+                    : 'SMS cross-check not active — screenshot records only',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.outline,
@@ -288,7 +304,7 @@ class _BranchCardState extends State<_BranchCard> {
               _Figure(
                 label: 'Credited',
                 cents: summary.creditedCents,
-                color: _creditGreen,
+                color: AppColors.credit,
               ),
               _Figure(
                 label: 'Debited',
@@ -335,17 +351,24 @@ class _BranchCardState extends State<_BranchCard> {
   }
 }
 
-class _VerificationBadge extends StatelessWidget {
+class _VerificationBadge extends ConsumerWidget {
   const _VerificationBadge({required this.branch});
 
   final BranchDayReport branch;
 
   @override
-  Widget build(BuildContext context) {
-    // Green only when everything is vouched for; amber while any row isn't.
+  Widget build(BuildContext context, WidgetRef ref) {
+    // No cross-check running (iOS, permission skipped) → no badge: an amber
+    // "0/3 verified" that can never resolve is a dead-end warning. Likewise a
+    // branch with no transactions has nothing to verify — 0/0 in warning amber
+    // read as a problem where there was only an empty day.
+    if (!ref.watch(smsCrossCheckActiveProvider)) return const SizedBox.shrink();
+    if (branch.summary.txCount == 0) return const SizedBox.shrink();
+
+    // Green only when everything is vouched for; AppColors.pending while any row isn't.
     final full = branch.isFullyVerified;
-    final color = full ? _creditGreen : _amber;
-    final background = full ? const Color(0xFFDCF0E4) : const Color(0xFFFFF3D6);
+    final color = full ? AppColors.credit : AppColors.pending;
+    final background = full ? AppColors.creditWash : AppColors.pendingWash;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -414,13 +437,13 @@ class _Figure extends StatelessWidget {
   }
 }
 
-class _TransactionLine extends StatelessWidget {
+class _TransactionLine extends ConsumerWidget {
   const _TransactionLine({required this.row});
 
   final TransactionWithSms row;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tx = row.transaction;
     final isCredit = tx.type == TxType.credit;
@@ -448,18 +471,22 @@ class _TransactionLine extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Icon(
-            row.isVerified ? Icons.verified : Icons.verified_outlined,
-            size: 12,
-            color: row.isVerified
-                ? _creditGreen
-                : theme.colorScheme.outlineVariant,
-          ),
-          const SizedBox(width: 8),
+          // Without a running cross-check every row would wear the hollow
+          // "unverified" tick forever — a warning nothing can ever clear.
+          if (ref.watch(smsCrossCheckActiveProvider)) ...[
+            Icon(
+              row.isVerified ? Icons.verified : Icons.verified_outlined,
+              size: 12,
+              color: row.isVerified
+                  ? AppColors.credit
+                  : theme.colorScheme.outlineVariant,
+            ),
+            const SizedBox(width: 8),
+          ],
           Text(
             formatSignedCents(signed),
             style: theme.textTheme.bodySmall?.copyWith(
-              color: isCredit ? _creditGreen : theme.colorScheme.error,
+              color: isCredit ? AppColors.credit : theme.colorScheme.error,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),

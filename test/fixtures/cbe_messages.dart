@@ -220,14 +220,14 @@ final fixtureRealReceiptDebit = CbeFixture.value(
       'Transaction Summary '
       'ETB 1.00 has been debited from ABEBE KEBEDE TESFAYE ETB-8402 for '
       'ALMAZ TESFA GIRMA ETB-3487 on Jul 15, 2026 11:45 AM with transaction '
-      'ID: FT26196FZHT2. Reason: MB Transfer '
+      'ID: FT26196QW3ZP. Reason: MB Transfer '
       'Total Amount Debited: ETB1.61 with Service Charge of ETB0.50, VAT '
       '(15%) of ETB0.08 and Disaster Recovery (5%) of ETB0.03. '
       'Commercial Bank of Ethiopia The bank you can always rely on!',
   type: TxType.debit,
   // The transfer itself — NOT the 1.61 fee-inclusive total.
   amountCents: 100,
-  reference: 'FT26196FZHT2',
+  reference: 'FT26196QW3ZP',
   date: DateTime(2026, 7, 15, 11, 45),
   confidence: Confidence.high,
 );

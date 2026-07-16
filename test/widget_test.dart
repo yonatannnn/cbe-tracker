@@ -8,15 +8,24 @@
 // only care that the UI renders what the providers emit.
 
 import 'package:cbe_tracker/app/app.dart';
+import 'package:cbe_tracker/app/theme.dart';
 import 'package:cbe_tracker/data/db/database.dart';
 import 'package:cbe_tracker/data/db/database_provider.dart';
 import 'package:cbe_tracker/features/branch_detail/branch_detail_providers.dart';
+import 'package:cbe_tracker/features/dashboard/period.dart';
 import 'package:cbe_tracker/features/reconcile/reconcile_providers.dart';
 import 'package:cbe_tracker/features/reports/reports_providers.dart';
 import 'package:cbe_tracker/services/report_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Pins the day so the period providers resolve deterministically and no
+/// midnight-rollover timer is left pending at the end of a test.
+class _FixedToday extends Today {
+  @override
+  DateTime build() => DateTime(2026, 7, 15);
+}
 
 void main() {
   final bole = Branch(
@@ -37,18 +46,31 @@ void main() {
   }) {
     return ProviderScope(
       overrides: [
+        // Deterministic day → the default all-time period, no rollover timer.
+        todayProvider.overrideWith(_FixedToday.new),
         activeBranchesProvider.overrideWithValue(AsyncValue.data(branches)),
         totalBalanceCentsProvider.overrideWithValue(AsyncValue.data(totalCents)),
         todayDeltaCentsProvider.overrideWithValue(
           AsyncValue.data(todayDeltaCents),
         ),
+        // The dashboard headline reads the period figure; at the default
+        // all-time window it equals the total balance.
+        periodDeltaCentsProvider.overrideWithValue(
+          AsyncValue.data(totalCents),
+        ),
         unmatchedSmsCountProvider.overrideWithValue(
           AsyncValue.data(unmatchedSms),
         ),
+        // The test host isn't Android, so the real provider would report the
+        // cross-check as off and the strip would show its muted variant.
+        smsCrossCheckActiveProvider.overrideWithValue(true),
         branchBalanceCentsProvider(
           bole.id,
         ).overrideWithValue(AsyncValue.data(branchBalanceCents)),
-        branchTodayCountProvider(
+        branchPeriodDeltaProvider(
+          bole.id,
+        ).overrideWithValue(AsyncValue.data(branchBalanceCents)),
+        branchPeriodCountProvider(
           bole.id,
         ).overrideWithValue(AsyncValue.data(branchTodayCount)),
         // Phase 7's branch detail is a real screen now, so its stream needs
@@ -65,13 +87,14 @@ void main() {
               footer: const ReconciliationFooter(
                 personalCount: 0,
                 unresolvedCount: 0,
+                crossChecked: true,
               ),
             ),
           ),
         ),
       ],
       // No notification plugin or database in widget tests.
-      child: const CbeTrackerApp(bootstrapReminder: false),
+      child: const CbeTrackerApp(bootstrap: false),
     );
   }
 
@@ -106,14 +129,19 @@ void main() {
   });
 
   group('dashboard', () {
-    testWidgets('boots with 4 tabs', (tester) async {
+    testWidgets('boots with 3 tabs — adding is the FAB, not a tab', (
+      tester,
+    ) async {
       await tester.pumpWidget(app(branches: [bole]));
       await tester.pumpAndSettle();
 
       expect(find.text('Home'), findsOneWidget);
-      expect(find.text('Add'), findsOneWidget);
       expect(find.text('Reconcile'), findsOneWidget);
       expect(find.text('Reports'), findsOneWidget);
+      // Tabs are destinations; adding is an action. The old 'Add' tab led to a
+      // dead placeholder because there was no place for it to go.
+      expect(find.widgetWithText(NavigationDestination, 'Add'), findsNothing);
+      expect(find.byType(FloatingActionButton), findsOneWidget);
     });
 
     testWidgets('total card and branch card show formatted balances', (
@@ -124,27 +152,31 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Total balance'), findsOneWidget);
-      expect(find.text('ETB 145,200.00'), findsNWidgets(2)); // total + card
+      // The default window is all-time, so the headline reads its label and
+      // the figure is a plain balance (unsigned) in both the total and the row.
+      expect(find.text('ALL TIME'), findsOneWidget);
+      expect(find.text('ETB 145,200.00'), findsNWidgets(2)); // total + row
       expect(find.text('Bole'), findsOneWidget);
     });
 
-    testWidgets('branch card pluralises today\'s count', (tester) async {
+    testWidgets('branch card pluralises its count', (tester) async {
       await tester.pumpWidget(app(branches: [bole], branchTodayCount: 1));
       await tester.pumpAndSettle();
-      expect(find.text('1 transaction today'), findsOneWidget);
+      expect(find.text('1 transaction'), findsOneWidget);
 
       await tester.pumpWidget(app(branches: [bole], branchTodayCount: 3));
       await tester.pumpAndSettle();
-      expect(find.text('3 transactions today'), findsOneWidget);
+      expect(find.text('3 transactions'), findsOneWidget);
     });
 
     testWidgets('today delta is hidden at zero', (tester) async {
       await tester.pumpWidget(app(branches: [bole]));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('today'), findsOneWidget); // only the card line
+      // The delta line is omitted entirely rather than reading "ETB 0.00".
       expect(find.textContaining('ETB 0.00 today'), findsNothing);
+      expect(find.textContaining('+ ETB'), findsNothing);
+      expect(find.textContaining('− ETB'), findsNothing);
     });
 
     testWidgets('positive delta renders green with a plus', (tester) async {
@@ -152,7 +184,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final text = tester.widget<Text>(find.text('+ ETB 5,000.00 today'));
-      expect(text.style?.color, const Color(0xFF1B7A43));
+      expect(text.style?.color, AppColors.credit);
     });
 
     testWidgets('negative delta renders red with a minus sign', (tester) async {
@@ -160,22 +192,45 @@ void main() {
       await tester.pumpAndSettle();
 
       final text = tester.widget<Text>(find.text('− ETB 5,000.00 today'));
-      final scheme = Theme.of(
-        tester.element(find.text('− ETB 5,000.00 today')),
-      ).colorScheme;
-      expect(text.style?.color, scheme.error);
+      expect(text.style?.color, AppColors.debit);
     });
 
-    testWidgets('SMS banner hidden at 0, shown above 0', (tester) async {
+    // The reconciliation strip is always present and switches state, rather
+    // than appearing only on trouble (§FR-8 says "banner when unmatched SMS
+    // exist"). Deliberate: the app's whole job is answering "did anything slip
+    // through?", and a hidden banner answers nothing — you can't tell "all
+    // clear" from "the check never ran".
+    testWidgets('strip confirms all-clear when nothing is waiting', (
+      tester,
+    ) async {
       await tester.pumpWidget(app(branches: [bole]));
       await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
 
+      expect(
+        find.text('Every CBE message today has a screenshot'),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsNothing);
+    });
+
+    testWidgets('strip warns, and pluralises, when payments are waiting', (
+      tester,
+    ) async {
       await tester.pumpWidget(app(branches: [bole], unmatchedSms: 3));
       await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+
       expect(
-        find.text('3 SMS not matched to a screenshot today'),
+        find.text('3 payments texted today have no screenshot'),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle), findsNothing);
+
+      await tester.pumpWidget(app(branches: [bole], unmatchedSms: 1));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('1 payment texted today has no screenshot'),
         findsOneWidget,
       );
     });

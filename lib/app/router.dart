@@ -86,14 +86,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/add',
-                builder: (context, state) => const AddScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
                 path: '/reconcile',
                 builder: (context, state) => const ReconcileScreen(),
               ),

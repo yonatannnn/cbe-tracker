@@ -97,13 +97,15 @@ class BulkProcessor {
   final TransactionDao dao;
 
   /// Hard cap from §FR-3.
-  static const int maxImages = 10;
+  static const int maxImages = 50;
 
   /// Processes [images] one at a time, emitting after each.
   ///
-  /// Sequential on purpose: ten concurrent ML Kit decodes would spike memory
-  /// and thrash the recognizer. Anything past [maxImages] is ignored — the UI
-  /// caps the selection before it gets here.
+  /// Sequential on purpose: OCR runs one receipt at a time, so the cap bounds
+  /// how long the progress bar and the review list get — at ~1–2s per image,
+  /// 50 is roughly a minute of processing, which the progress bar covers.
+  /// Anything past [maxImages] is ignored — the UI caps the selection before it
+  /// gets here.
   Stream<BulkProgress> process(List<File> images) async* {
     final batch = images.take(maxImages).toList();
     final results = <BulkItem>[];

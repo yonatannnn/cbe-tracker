@@ -29,7 +29,13 @@ class MlKitOcrService implements OcrService {
   /// Longest edge we feed ML Kit. Screenshots above this are downscaled to
   /// keep memory sane; smaller images are passed through untouched — we never
   /// upscale, since inventing pixels can only hurt recognition.
-  static const int _maxEdge = 2000;
+  ///
+  /// 2800 on purpose: a modern phone screenshot is ~1080×2400, and the old
+  /// 2000 cap put every single one through decode + Flutter's slow PNG
+  /// re-encode + a temp file — half a second to two seconds per image that
+  /// bought ML Kit nothing, times fifty in a bulk run. The guard now only
+  /// catches genuinely huge imports (camera photos, scans).
+  static const int _maxEdge = 2800;
 
   @override
   Future<String> extractText(File image) async {

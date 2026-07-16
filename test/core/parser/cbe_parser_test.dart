@@ -83,7 +83,7 @@ void main() {
   group('date formats', () {
     ParsedCbeMessage parseWithDate(String dateText) => parseCbeText(
       'ETB 5,000.00 has been credited $dateText with transaction ID: '
-      'FT26196FZHT2.',
+      'FT26196QW3ZP.',
     );
 
     test('12-hour AM/PM conversion', () {

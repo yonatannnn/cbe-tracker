@@ -160,21 +160,27 @@ void main() {
     ]);
   });
 
-  test('caps the batch at 10 images', () async {
+  test('caps the batch at maxImages', () async {
+    // Feed a handful more than the cap so the test holds at any cap value.
+    final over = BulkProcessor.maxImages + 5;
     final script = <String, ParseOutcome>{
-      for (var i = 1; i <= 15; i++)
+      for (var i = 1; i <= over; i++)
         'img$i.png': ParseSuccess(parsed(reference: 'FTOK$i')),
     };
     final pipeline = _ScriptedPipeline(script);
     final processor = BulkProcessor(pipeline: pipeline, dao: db.transactionDao);
 
     final progress = await processor
-        .process([for (var i = 1; i <= 15; i++) File('img$i.png')])
+        .process([for (var i = 1; i <= over; i++) File('img$i.png')])
         .toList();
 
     expect(progress, hasLength(BulkProcessor.maxImages));
-    expect(progress.last.total, 10);
-    expect(pipeline.calls, hasLength(10), reason: 'images 11-15 never parsed');
+    expect(progress.last.total, BulkProcessor.maxImages);
+    expect(
+      pipeline.calls,
+      hasLength(BulkProcessor.maxImages),
+      reason: 'images past the cap are never parsed',
+    );
   });
 
   test('an unreferenced parse is ok, not duplicate', () async {

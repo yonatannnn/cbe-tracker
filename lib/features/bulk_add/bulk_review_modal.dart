@@ -2,6 +2,8 @@
 library;
 
 
+import 'dart:io';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +15,7 @@ import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
 import '../../services/bulk_processor.dart';
+import '../../services/service_providers.dart';
 import '../reconcile/reconcile_providers.dart';
 import '../shared/manual_entry_fields.dart';
 import 'bulk_review_state.dart';
@@ -67,30 +70,45 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
     });
 
     final rows = _state.checkedRows;
-    final entries = [
-      for (final row in rows)
-        TransactionsCompanion.insert(
-          branchId: widget.branchId,
-          amountCents: row.effectiveCents!,
-          type: row.effectiveType!,
-          reference: row.effectiveReference(),
-          source: TxSource.screenshot,
-          transactionDate: row.item.parsed?.date ?? DateTime.now(),
-          screenshotPath: Value(row.item.image.path),
-          ocrText: Value(row.item.parsed?.rawText ?? row.item.rawText),
-        ),
-    ];
+    final store = ref.read(imageStoreProvider);
+
+    final entries = <TransactionsCompanion>[];
+    try {
+      // Copy every picked image out of the cache before any row points at it
+      // (§2) — image_picker hands back a path Android may delete at any time.
+      for (final row in rows) {
+        final storedPath = await store.save(row.item.image);
+        entries.add(
+          TransactionsCompanion.insert(
+            branchId: widget.branchId,
+            amountCents: row.effectiveCents!,
+            type: row.effectiveType!,
+            reference: row.effectiveReference(),
+            source: TxSource.screenshot,
+            transactionDate: row.item.parsed?.date ?? DateTime.now(),
+            screenshotPath: Value(storedPath),
+            ocrText: Value(row.item.parsed?.rawText ?? row.item.rawText),
+          ),
+        );
+      }
+    } on Object {
+      // ImageStore.save only swallows FileSystemException; anything else used
+      // to escape this method entirely, leaving _saving stuck true — a spinner
+      // that never stops and a Save button that never comes back.
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = "Couldn't read one of these images. Nothing was saved.";
+      });
+      return;
+    }
+    if (!mounted) return;
 
     try {
       // All-or-nothing (Phase 2). Duplicates were filtered into their own
       // rows, so one reaching here means the same reference was saved
       // elsewhere mid-review — a real error, and the whole batch rolls back.
       await ref.read(transactionDaoProvider).insertManyAtomic(entries);
-      await ref.read(settingsDaoProvider).setLastBranchId(widget.branchId);
-      // CBE SMS for these may already be waiting to match (§FR-5).
-      await ref.read(reconcileServiceProvider).reconcile();
-      if (!mounted) return;
-      Navigator.pop(context, rows.length);
     } on Object {
       if (!mounted) return;
       setState(() {
@@ -99,7 +117,33 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
             'Nothing was saved — one of these was recorded somewhere else '
             'in the meantime. Nothing was half-applied; try again.';
       });
+      return;
     }
+
+    // Past this line the batch is committed, so nothing below may report
+    // "nothing was saved" — that sentence on top of ten saved transactions
+    // would send her to save them again, and every reference would then collide
+    // as a duplicate, trapping her in a modal insisting nothing had saved.
+    try {
+      await ref.read(settingsDaoProvider).setLastBranchId(widget.branchId);
+      // CBE SMS for these may already be waiting to match (§FR-5).
+      await ref.read(reconcileServiceProvider).reconcile();
+    } on Object {
+      // Non-fatal: the money is recorded. Remembering the branch and matching
+      // the SMS are conveniences, and the next sweep redoes the match anyway.
+    }
+    // The saved rows' picker cache copies are dead weight now — the durable
+    // copies are in the documents dir. Only after the commit: a failed save
+    // returns to this modal and retries from these very files.
+    for (final row in rows) {
+      try {
+        await row.item.image.delete();
+      } on FileSystemException {
+        // Cache files are Android's to purge anyway.
+      }
+    }
+    if (!mounted) return;
+    Navigator.pop(context, rows.length);
   }
 
   Future<void> _confirmDiscard() async {
@@ -284,7 +328,7 @@ class _ReviewRowTile extends StatelessWidget {
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w500,
                           color: isCredit
-                              ? const Color(0xFF1B7A43)
+                              ? AppColors.credit
                               : theme.colorScheme.error,
                         ),
                       ),
@@ -469,22 +513,21 @@ class _AiBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const amber = Color(0xFF8A5A00);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF3D6),
+        color: AppColors.pendingWash,
         borderRadius: BorderRadius.circular(4),
       ),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.auto_awesome, size: 10, color: amber),
+          Icon(Icons.auto_awesome, size: 10, color: AppColors.pending),
           SizedBox(width: 3),
           Text(
             'AI',
             style: TextStyle(
-              color: amber,
+              color: AppColors.pending,
               fontSize: 9,
               fontWeight: FontWeight.w700,
             ),
