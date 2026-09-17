@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'package:cbe_tracker/core/parser/cbe_parser.dart';
 import 'package:cbe_tracker/data/db/database.dart';
+import 'package:cbe_tracker/data/db/database_provider.dart';
 import 'package:cbe_tracker/data/db/tables.dart';
 import 'package:cbe_tracker/features/bulk_add/bulk_review_modal.dart';
 import 'package:cbe_tracker/services/bulk_processor.dart';
@@ -48,12 +49,26 @@ void main() {
   Future<void> pump(WidgetTester tester, List<BulkItem> items) async {
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          // Branch names for "already saved before — <branch>"; no database.
+          activeBranchesProvider.overrideWithValue(
+            AsyncValue.data([
+              Branch(
+                id: 1,
+                name: 'Bole',
+                archived: false,
+                createdAt: DateTime(2026, 7, 1),
+              ),
+            ]),
+          ),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: BulkReviewModal(
               items: items,
               branchId: 1,
               branchName: 'Bole',
+              day: DateTime(2026, 7, 15),
             ),
           ),
         ),
@@ -82,10 +97,26 @@ void main() {
     ]);
 
     expect(find.textContaining('Review 3'), findsOneWidget);
-    // Only the clean parse starts checked → the button says exactly 1.
-    expect(find.text('Save 1 transaction'), findsOneWidget);
+    // The approval screen leads with how many were read, and the day.
+    expect(
+      find.text('2 of 3 read correctly · 1 duplicate not saved · 1 unreadable'),
+      findsOneWidget,
+    );
+    expect(find.text('Bole · 15 Jul 2026'), findsOneWidget);
+    // Only the clean parse starts checked → the button says exactly 1, and
+    // the sum is that one row.
+    expect(find.text('Approve 1 transaction'), findsOneWidget);
+    expect(find.text('Sum of the 1 selected'), findsOneWidget);
+    // The sum panel: the one checked credit in IN, nothing in OUT.
+    expect(find.text('IN'), findsOneWidget);
+    expect(find.text('ETB 5,000.00'), findsOneWidget);
+    expect(find.text('ETB 0.00'), findsOneWidget);
     // The duplicate says so, with the original's date.
-    expect(find.textContaining('Already recorded'), findsOneWidget);
+    expect(
+      find.text('Already saved before — Bole, 10/07/2026 at 09:00'),
+      findsOneWidget,
+    );
+    expect(find.text('DUPLICATE · NOT SAVED'), findsOneWidget);
     // The unreadable row says so.
     expect(find.textContaining("Couldn't read"), findsOneWidget);
   });
@@ -98,7 +129,7 @@ void main() {
     ]);
 
     // §FR-3: trust the local parser, make the human vouch for the AI.
-    expect(find.text('Save 1 transaction'), findsOneWidget);
+    expect(find.text('Approve 1 transaction'), findsOneWidget);
 
     // Two checkboxes; the AI row's is the unchecked one.
     final boxes = find.byType(Checkbox);
@@ -111,25 +142,41 @@ void main() {
     await tester.tap(boxes.at(unchecked));
     await tester.pumpAndSettle();
 
-    expect(find.text('Save 2 transactions'), findsOneWidget);
+    expect(find.text('Approve 2 transactions'), findsOneWidget);
   });
 
   testWidgets('unchecking every row disables the save button', (tester) async {
     await pump(tester, [
       BulkItem.ok(png, _parsed('FT26OK0001')),
     ]);
-    expect(find.text('Save 1 transaction'), findsOneWidget);
+    expect(find.text('Approve 1 transaction'), findsOneWidget);
 
     await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Save 0 transactions'), findsOneWidget);
+    expect(find.text('Approve 0 transactions'), findsOneWidget);
     final button = tester.widget<FilledButton>(
       find.ancestor(
-        of: find.text('Save 0 transactions'),
+        of: find.text('Approve 0 transactions'),
         matching: find.byType(FilledButton),
       ),
     );
     expect(button.onPressed, isNull, reason: 'nothing checked → nothing to save');
+  });
+
+  testWidgets('a repeat inside the batch names the screenshot it copies', (
+    tester,
+  ) async {
+    await pump(tester, [
+      BulkItem.ok(png, _parsed('FT26SAME001')),
+      BulkItem.ok(png, _parsed('FT26OTHER01')),
+      BulkItem.duplicateInBatch(png, _parsed('FT26SAME001'), 1),
+    ]);
+
+    expect(find.text('Same receipt as screenshot #1'), findsOneWidget);
+    expect(find.text('DUPLICATE · NOT SAVED'), findsOneWidget);
+    // Only the two distinct receipts are approvable.
+    expect(find.text('Approve 2 transactions'), findsOneWidget);
+    expect(find.byType(Checkbox), findsNWidgets(2));
   });
 }

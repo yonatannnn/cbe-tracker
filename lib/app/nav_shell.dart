@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 
 /// Bottom-navigation shell (§6: bottom nav shell / IndexedStack).
 ///
-/// Three destinations, not four: adding is an ACTION (the dashboard FAB),
+/// Two destinations: adding is an ACTION (the dashboard FAB),
 /// not a place you navigate to. The old 'Add' tab led to a dead placeholder
 /// screen for exactly that reason — there was nothing for it to be.
 ///
@@ -20,11 +20,6 @@ class NavShell extends StatelessWidget {
       icon: Icon(Icons.home_outlined),
       selectedIcon: Icon(Icons.home),
       label: 'Home',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.rule_outlined),
-      selectedIcon: Icon(Icons.rule),
-      label: 'Reconcile',
     ),
     NavigationDestination(
       icon: Icon(Icons.assessment_outlined),

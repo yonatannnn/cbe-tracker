@@ -9,10 +9,10 @@ import '../../app/theme.dart';
 import '../../core/money/etb_format.dart';
 import '../../core/parser/cbe_parser.dart';
 import '../../data/db/database.dart';
+import '../../data/db/database_provider.dart';
 import '../../services/report_service.dart';
-import '../reconcile/reconcile_providers.dart';
+import 'daily_bars_chart.dart';
 import 'reports_providers.dart';
-
 
 class ReportsScreen extends ConsumerWidget {
   const ReportsScreen({super.key});
@@ -23,10 +23,13 @@ class ReportsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Reports')),
-      body: report.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text("Couldn't build report: $error")),
-        data: (data) => _Body(report: data),
+      body: SafeArea(
+        child: report.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) =>
+              Center(child: Text("Couldn't build report: $error")),
+          data: (data) => _Body(report: data),
+        ),
       ),
     );
   }
@@ -70,7 +73,9 @@ class _BodyState extends ConsumerState<_Body> {
 
   void _say(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _sharePerBranch() async {
@@ -83,11 +88,7 @@ class _BodyState extends ConsumerState<_Body> {
       final pdf = ref.read(pdfServiceProvider);
       final files = <XFile>[];
       for (final branch in branches) {
-        final file = await pdf.buildForBranch(
-          branch,
-          _report.day,
-          _report.footer,
-        );
+        final file = await pdf.buildForBranch(branch, _report.day);
         files.add(XFile(file.path));
       }
       // One PDF per branch, shared together — she forwards each to the right
@@ -116,10 +117,16 @@ class _BodyState extends ConsumerState<_Body> {
         const Divider(height: 1),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
             children: [
+              const _WeekChart(),
+              const Divider(height: 1),
+              const SizedBox(height: 16),
               for (final branch in _report.branches) ...[
-                _BranchCard(branch: branch),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _BranchCard(branch: branch),
+                ),
                 const SizedBox(height: 10),
               ],
               if (_report.branches.isEmpty)
@@ -131,20 +138,6 @@ class _BodyState extends ConsumerState<_Body> {
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
-              const SizedBox(height: 8),
-              // §FR-6 footer line. When the cross-check never ran, "0
-              // unresolved" would read as a clean bill of health — say so
-              // honestly instead.
-              Text(
-                _report.footer.crossChecked
-                    ? '${_report.footer.personalCount} SMS marked personal · '
-                          '${_report.footer.unresolvedCount} unresolved'
-                    : 'SMS cross-check not active — screenshot records only',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),
-              ),
             ],
           ),
         ),
@@ -200,6 +193,23 @@ class _BodyState extends ConsumerState<_Body> {
 
   static String _longDate(DateTime day) =>
       '${_months[day.month - 1]} ${day.day}, ${day.year}';
+}
+
+/// The seven-day chart; tapping a column moves the report to that day.
+class _WeekChart extends ConsumerWidget {
+  const _WeekChart();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final days = ref.watch(dailyBarsProvider).value;
+    if (days == null) return const SizedBox(height: 180);
+    return DailyBarsChart(
+      days: days,
+      selected: ref.watch(reportDayProvider),
+      today: ref.watch(todayProvider),
+      onSelect: (day) => ref.read(reportDayProvider.notifier).select(day),
+    );
+  }
 }
 
 class _DayPicker extends ConsumerWidget {
@@ -296,7 +306,6 @@ class _BranchCardState extends State<_BranchCard> {
                       style: theme.textTheme.titleMedium,
                     ),
                   ),
-                  _VerificationBadge(branch: branch),
                 ],
               ),
               const SizedBox(height: 12),
@@ -351,50 +360,6 @@ class _BranchCardState extends State<_BranchCard> {
   }
 }
 
-class _VerificationBadge extends ConsumerWidget {
-  const _VerificationBadge({required this.branch});
-
-  final BranchDayReport branch;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // No cross-check running (iOS, permission skipped) → no badge: an amber
-    // "0/3 verified" that can never resolve is a dead-end warning. Likewise a
-    // branch with no transactions has nothing to verify — 0/0 in warning amber
-    // read as a problem where there was only an empty day.
-    if (!ref.watch(smsCrossCheckActiveProvider)) return const SizedBox.shrink();
-    if (branch.summary.txCount == 0) return const SizedBox.shrink();
-
-    // Green only when everything is vouched for; AppColors.pending while any row isn't.
-    final full = branch.isFullyVerified;
-    final color = full ? AppColors.credit : AppColors.pending;
-    final background = full ? AppColors.creditWash : AppColors.pendingWash;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(full ? Icons.verified : Icons.info_outline, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(
-            '${branch.verificationLabel} verified',
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _Figure extends StatelessWidget {
   const _Figure({
     required this.label,
@@ -440,12 +405,12 @@ class _Figure extends StatelessWidget {
 class _TransactionLine extends ConsumerWidget {
   const _TransactionLine({required this.row});
 
-  final TransactionWithSms row;
+  final Transaction row;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final tx = row.transaction;
+    final tx = row;
     final isCredit = tx.type == TxType.credit;
     final signed = isCredit ? tx.amountCents : -tx.amountCents;
     String two(int v) => v.toString().padLeft(2, '0');
@@ -471,18 +436,6 @@ class _TransactionLine extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          // Without a running cross-check every row would wear the hollow
-          // "unverified" tick forever — a warning nothing can ever clear.
-          if (ref.watch(smsCrossCheckActiveProvider)) ...[
-            Icon(
-              row.isVerified ? Icons.verified : Icons.verified_outlined,
-              size: 12,
-              color: row.isVerified
-                  ? AppColors.credit
-                  : theme.colorScheme.outlineVariant,
-            ),
-            const SizedBox(width: 8),
-          ],
           Text(
             formatSignedCents(signed),
             style: theme.textTheme.bodySmall?.copyWith(

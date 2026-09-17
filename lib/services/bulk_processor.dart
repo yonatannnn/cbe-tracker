@@ -23,7 +23,8 @@ enum BulkStatus {
   /// Parsed via the Gemini fallback — must be user-checked before saving.
   okAiParsed,
 
-  /// Reference already exists in transactions; cannot be saved again.
+  /// Reference already exists in transactions, or appeared earlier in this
+  /// same batch; cannot be saved again.
   duplicate,
 
   /// Unreadable — nothing trustworthy came back.
@@ -36,27 +37,40 @@ class BulkItem {
     required this.status,
     this.parsed,
     this.existing,
+    this.duplicateOf,
     this.rawText,
   });
 
   BulkItem.ok(this.image, ParsedCbeMessage this.parsed)
     : status = BulkStatus.ok,
       existing = null,
+      duplicateOf = null,
       rawText = null;
 
   BulkItem.okAiParsed(this.image, ParsedCbeMessage this.parsed)
     : status = BulkStatus.okAiParsed,
       existing = null,
+      duplicateOf = null,
       rawText = null;
 
   BulkItem.duplicate(this.image, this.parsed, Transaction this.existing)
     : status = BulkStatus.duplicate,
+      duplicateOf = null,
+      rawText = null;
+
+  /// The same receipt was already in THIS batch, at 1-based [duplicateOf].
+  /// Saving it too would collide on the UNIQUE reference and fail the whole
+  /// atomic insert, so it is shown and locked, never saved.
+  BulkItem.duplicateInBatch(this.image, this.parsed, int this.duplicateOf)
+    : status = BulkStatus.duplicate,
+      existing = null,
       rawText = null;
 
   BulkItem.failed(this.image, this.rawText)
     : status = BulkStatus.failed,
       parsed = null,
-      existing = null;
+      existing = null,
+      duplicateOf = null;
 
   final File image;
   final BulkStatus status;
@@ -66,6 +80,11 @@ class BulkItem {
 
   /// The already-recorded transaction, for "Already recorded on `<date>`".
   final Transaction? existing;
+
+  /// 1-based position of the earlier screenshot in this batch with the same
+  /// reference, for "Same receipt as screenshot N". Null unless this is an
+  /// in-batch repeat.
+  final int? duplicateOf;
 
   /// Whatever OCR read, when the parse failed. May be empty.
   final String? rawText;
@@ -109,9 +128,12 @@ class BulkProcessor {
   Stream<BulkProgress> process(List<File> images) async* {
     final batch = images.take(maxImages).toList();
     final results = <BulkItem>[];
+    // Reference → 1-based position of the first screenshot that carried it,
+    // so a repeat inside the batch is caught here and not by the database.
+    final seen = <String, int>{};
 
     for (var i = 0; i < batch.length; i++) {
-      results.add(await _processOne(batch[i]));
+      results.add(await _processOne(batch[i], i + 1, seen));
       yield BulkProgress(
         current: i + 1,
         total: batch.length,
@@ -120,7 +142,11 @@ class BulkProcessor {
     }
   }
 
-  Future<BulkItem> _processOne(File image) async {
+  Future<BulkItem> _processOne(
+    File image,
+    int position,
+    Map<String, int> seen,
+  ) async {
     final outcome = await pipeline.parse(image);
 
     switch (outcome) {
@@ -135,6 +161,11 @@ class BulkProcessor {
           if (existing != null) {
             return BulkItem.duplicate(image, parsed, existing);
           }
+          final earlier = seen[reference];
+          if (earlier != null) {
+            return BulkItem.duplicateInBatch(image, parsed, earlier);
+          }
+          seen[reference] = position;
         }
         return parsed.confidence == Confidence.aiParsed
             ? BulkItem.okAiParsed(image, parsed)

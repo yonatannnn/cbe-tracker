@@ -1,7 +1,6 @@
 /// Bulk review modal — three row states plus an atomic save (§7, FR-3).
 library;
 
-
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -9,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
+import '../../core/dates/day_format.dart';
 import '../../core/money/etb_format.dart';
 import '../../core/parser/cbe_parser.dart';
 import '../../data/db/database.dart';
@@ -16,16 +16,19 @@ import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
 import '../../services/bulk_processor.dart';
 import '../../services/service_providers.dart';
-import '../reconcile/reconcile_providers.dart';
 import '../shared/manual_entry_fields.dart';
 import 'bulk_review_state.dart';
 
-/// Shows the review sheet. Returns the number saved, or null if discarded.
+/// Shows the approval sheet. Returns the number saved, or null if discarded.
+///
+/// [day] is the calendar day the batch is filed under (§FR-3: defaults to
+/// today, changeable on the previous screen).
 Future<int?> showBulkReviewModal({
   required BuildContext context,
   required List<BulkItem> items,
   required int branchId,
   required String branchName,
+  required DateTime day,
 }) {
   return showModalBottomSheet<int>(
     context: context,
@@ -37,6 +40,7 @@ Future<int?> showBulkReviewModal({
       items: items,
       branchId: branchId,
       branchName: branchName,
+      day: day,
     ),
   );
 }
@@ -47,11 +51,15 @@ class BulkReviewModal extends ConsumerStatefulWidget {
     required this.items,
     required this.branchId,
     required this.branchName,
+    required this.day,
   });
 
   final List<BulkItem> items;
   final int branchId;
   final String branchName;
+
+  /// The day every approved row is dated — see [transactionDateFor].
+  final DateTime day;
 
   @override
   ConsumerState<BulkReviewModal> createState() => _BulkReviewModalState();
@@ -85,7 +93,11 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
             type: row.effectiveType!,
             reference: row.effectiveReference(),
             source: TxSource.screenshot,
-            transactionDate: row.item.parsed?.date ?? DateTime.now(),
+            transactionDate: transactionDateFor(
+              day: widget.day,
+              parsed: row.item.parsed?.date,
+              now: DateTime.now(),
+            ),
             screenshotPath: Value(storedPath),
             ocrText: Value(row.item.parsed?.rawText ?? row.item.rawText),
           ),
@@ -98,7 +110,9 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = "Couldn't read one of these images. Nothing was saved.";
+        _error =
+            "One of the pictures couldn't be opened, so nothing was saved. "
+            'Please try again.';
       });
       return;
     }
@@ -114,8 +128,9 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
       setState(() {
         _saving = false;
         _error =
-            'Nothing was saved — one of these was recorded somewhere else '
-            'in the meantime. Nothing was half-applied; try again.';
+            'Nothing was saved: one of these receipts is already in the '
+            'books. Close this and read the screenshots again so the app can '
+            'mark it for you.';
       });
       return;
     }
@@ -126,11 +141,9 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
     // as a duplicate, trapping her in a modal insisting nothing had saved.
     try {
       await ref.read(settingsDaoProvider).setLastBranchId(widget.branchId);
-      // CBE SMS for these may already be waiting to match (§FR-5).
-      await ref.read(reconcileServiceProvider).reconcile();
     } on Object {
-      // Non-fatal: the money is recorded. Remembering the branch and matching
-      // the SMS are conveniences, and the next sweep redoes the match anyway.
+      // Non-fatal: the money is recorded. Remembering the branch is a
+      // convenience.
     }
     // The saved rows' picker cache copies are dead weight now — the durable
     // copies are in the documents dir. Only after the commit: a failed save
@@ -177,6 +190,15 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // For "already saved before": name the branch it went into, which may
+    // not be this one.
+    final branches = ref.watch(activeBranchesProvider).value ?? const [];
+    String? branchNameOf(int id) {
+      for (final b in branches) {
+        if (b.id == id) return b.name;
+      }
+      return null;
+    }
 
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
@@ -201,7 +223,7 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
                           style: theme.textTheme.titleLarge,
                         ),
                         Text(
-                          widget.branchName,
+                          '${widget.branchName} · ${formatDay(widget.day)}',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.outline,
                           ),
@@ -217,6 +239,7 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
                 ],
               ),
             ),
+            _ReadSummary(state: _state, total: widget.items.length),
             const Divider(height: 1),
             Expanded(
               child: ListView.separated(
@@ -225,9 +248,12 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
                 itemCount: _state.rows.length,
                 separatorBuilder: (_, _) => const Divider(height: 1),
                 itemBuilder: (context, i) => _ReviewRowTile(
+                  number: i + 1,
                   row: _state.rows[i],
-                  onToggle: (checked) =>
-                      setState(() => _state = _state.toggle(i, checked: checked)),
+                  branchNameOf: branchNameOf,
+                  onToggle: (checked) => setState(
+                    () => _state = _state.toggle(i, checked: checked),
+                  ),
                   onExpand: (expanded) => setState(
                     () => _state = _state.setExpanded(i, expanded: expanded),
                   ),
@@ -240,6 +266,18 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
                 ),
               ),
             ),
+            const Divider(height: 1),
+            _SumPanel(state: _state),
+            if (_state.conflictingReference != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Text(
+                  'Two selected rows have the same reference '
+                  '${_state.conflictingReference}. Untick one of them to '
+                  'continue.',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -276,7 +314,9 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
 
 class _ReviewRowTile extends StatelessWidget {
   const _ReviewRowTile({
+    required this.number,
     required this.row,
+    required this.branchNameOf,
     required this.onToggle,
     required this.onExpand,
     required this.onAmount,
@@ -284,7 +324,10 @@ class _ReviewRowTile extends StatelessWidget {
     required this.onReference,
   });
 
+  /// 1-based position in the batch — what "same as screenshot 3" refers to.
+  final int number;
   final ReviewRow row;
+  final String? Function(int branchId) branchNameOf;
   final ValueChanged<bool> onToggle;
   final ValueChanged<bool> onExpand;
   final ValueChanged<int?> onAmount;
@@ -339,7 +382,7 @@ class _ReviewRowTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    row.item.parsed?.reference ?? 'No reference',
+                    '#$number · ${row.item.parsed?.reference ?? 'No reference'}',
                     style: AppTextStyles.mono.copyWith(
                       fontSize: 12,
                       color: theme.colorScheme.outline,
@@ -368,35 +411,69 @@ class _ReviewRowTile extends StatelessWidget {
   Widget _buildDuplicate(BuildContext context) {
     final theme = Theme.of(context);
     final existing = row.item.existing;
-    return Opacity(
-      opacity: 0.55,
+    final earlier = row.item.duplicateOf;
+    final cents = row.item.parsed?.amountCents ?? 0;
+    final isCredit = row.item.parsed?.type == TxType.credit;
+
+    final String reason;
+    if (existing != null) {
+      final branch = branchNameOf(existing.branchId);
+      reason =
+          'Already saved before — '
+          '${branch == null ? '' : '$branch, '}'
+          '${_formatDate(existing.transactionDate)}';
+    } else if (earlier != null) {
+      reason = 'Same receipt as screenshot #$earlier';
+    } else {
+      reason = 'Already saved before';
+    }
+
+    return Container(
+      color: AppColors.pendingWash.withValues(alpha: 0.5),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           // No checkbox at all — a duplicate can never be saved.
           const SizedBox(width: 48),
-          Icon(Icons.block, size: 18, color: theme.colorScheme.outline),
-          const SizedBox(width: 8),
+          _Thumb(image: row.item.image),
+          const SizedBox(width: 10),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    existing == null
-                        ? 'Already recorded'
-                        : 'Already recorded on '
-                              '${_formatDate(existing.transactionDate)}',
-                    style: theme.textTheme.bodyMedium,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      formatSignedCents(isCredit ? cents : -cents),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: theme.colorScheme.outline,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const _NotSavedBadge(),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  reason,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.pending,
+                    fontWeight: FontWeight.w500,
                   ),
-                  Text(
-                    row.item.parsed?.reference ?? '',
-                    style: AppTextStyles.mono.copyWith(fontSize: 12),
+                ),
+                Text(
+                  '#$number · ${row.item.parsed?.reference ?? ''}',
+                  style: AppTextStyles.mono.copyWith(
+                    fontSize: 12,
+                    color: theme.colorScheme.outline,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(width: 16),
         ],
       ),
     );
@@ -417,26 +494,11 @@ class _ReviewRowTile extends StatelessWidget {
                     )
                   : const SizedBox.shrink(),
             ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Image.file(
-                row.item.image,
-                width: 40,
-                height: 40,
-                fit: BoxFit.cover,
-                cacheWidth: 120,
-                errorBuilder: (context, _, _) => Container(
-                  width: 40,
-                  height: 40,
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  child: const Icon(Icons.broken_image_outlined, size: 18),
-                ),
-              ),
-            ),
+            _Thumb(image: row.item.image),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                "Couldn't read",
+                "#$number · Couldn't read this picture",
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.error,
                 ),
@@ -533,6 +595,191 @@ class _AiBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// "5 of 7 read correctly · 1 already recorded · 1 unreadable" — the first
+/// thing she checks before looking at any row.
+class _ReadSummary extends StatelessWidget {
+  const _ReadSummary({required this.state, required this.total});
+
+  final ReviewState state;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final read = state.readCount;
+    final allRead = read == total;
+    final parts = <String>[
+      '$read of $total read correctly',
+      if (state.duplicateCount > 0)
+        '${state.duplicateCount} '
+            '${state.duplicateCount == 1 ? 'duplicate' : 'duplicates'} '
+            'not saved',
+      if (state.failedCount > 0) '${state.failedCount} unreadable',
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Row(
+        children: [
+          Icon(
+            allRead ? Icons.check_circle : Icons.error_outline,
+            size: 18,
+            color: allRead ? AppColors.credit : AppColors.pending,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              parts.join(' · '),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: allRead ? AppColors.credit : AppColors.pending,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What approving adds up to: money in, money out, and the net change to the
+/// branch. Follows the checkboxes live, so unticking a row is visible in the
+/// total before she approves.
+class _SumPanel extends StatelessWidget {
+  const _SumPanel({required this.state});
+
+  final ReviewState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final net = state.netCents;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _SumCell(
+                  label: 'IN',
+                  value: formatCents(state.creditCents),
+                  color: AppColors.credit,
+                ),
+              ),
+              Expanded(
+                child: _SumCell(
+                  label: 'OUT',
+                  value: formatCents(state.debitCents),
+                  color: AppColors.debit,
+                ),
+              ),
+              Expanded(
+                child: _SumCell(
+                  label: 'NET',
+                  value: formatSignedCents(net),
+                  color: net < 0 ? AppColors.debit : AppColors.credit,
+                  alignEnd: true,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            state.checkedCount == 0
+                ? 'Nothing selected'
+                : 'Sum of the ${state.checkedCount} selected',
+            style: AppTextStyles.label.copyWith(
+              letterSpacing: 0,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SumCell extends StatelessWidget {
+  const _SumCell({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: alignEnd
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppTextStyles.label),
+        const SizedBox(height: 2),
+        Text(value, style: AppTextStyles.moneyRow.copyWith(color: color)),
+      ],
+    );
+  }
+}
+
+/// Small evidence thumbnail for rows she may need to recognise by eye.
+class _Thumb extends StatelessWidget {
+  const _Thumb({required this.image});
+
+  final File image;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Image.file(
+        image,
+        width: 40,
+        height: 40,
+        fit: BoxFit.cover,
+        cacheWidth: 120,
+        errorBuilder: (context, _, _) => Container(
+          width: 40,
+          height: 40,
+          color: theme.colorScheme.surfaceContainerHighest,
+          child: const Icon(Icons.broken_image_outlined, size: 18),
+        ),
+      ),
+    );
+  }
+}
+
+class _NotSavedBadge extends StatelessWidget {
+  const _NotSavedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.pendingWash,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'DUPLICATE · NOT SAVED',
+        style: TextStyle(
+          color: AppColors.pending,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }

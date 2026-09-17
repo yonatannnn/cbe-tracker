@@ -116,17 +116,57 @@ class ReviewState {
   List<ReviewRow> get checkedRows =>
       rows.where((r) => r.checked).toList(growable: false);
 
-  bool get canSave => checkedCount > 0;
+  bool get canSave => checkedCount > 0 && conflictingReference == null;
 
-  /// Live label — states the exact count (§FR-3).
+  /// A reference two CHECKED rows would both save under, or null when every
+  /// checked row is distinct. The processor already locks repeats it can
+  /// see; this catches one typed in by hand, before the database refuses the
+  /// whole batch for it.
+  String? get conflictingReference {
+    final seen = <String>{};
+    for (final row in rows) {
+      if (!row.checked) continue;
+      final reference = row.effectiveReference();
+      if (!seen.add(reference)) return reference;
+    }
+    return null;
+  }
+
+  /// Live label — states the exact count (§FR-3). "Approve" rather than
+  /// "Save": she is vouching for what the app read, and the sum shown beside
+  /// it is what she is vouching for.
   String get saveLabel => checkedCount == 1
-      ? 'Save 1 transaction'
-      : 'Save $checkedCount transactions';
+      ? 'Approve 1 transaction'
+      : 'Approve $checkedCount transactions';
+
+  /// Screenshots the app could read — the "N of M read correctly" figure on
+  /// the approval screen. A duplicate WAS read correctly; it just can't be
+  /// saved twice, which the summary says separately.
+  int get readCount => rows.where((r) => r.status != BulkStatus.failed).length;
 
   int get duplicateCount =>
       rows.where((r) => r.status == BulkStatus.duplicate).length;
 
-  int get failedCount => rows.where((r) => r.status == BulkStatus.failed).length;
+  int get failedCount =>
+      rows.where((r) => r.status == BulkStatus.failed).length;
+
+  /// Sum of the checked credits, in cents. Integer arithmetic only.
+  int get creditCents => _sum(TxType.credit);
+
+  /// Sum of the checked debits, in cents.
+  int get debitCents => _sum(TxType.debit);
+
+  /// What approving does to the branch balance: credits − debits.
+  int get netCents => creditCents - debitCents;
+
+  int _sum(TxType type) {
+    var total = 0;
+    for (final row in rows) {
+      if (!row.checked || row.effectiveType != type) continue;
+      total += row.effectiveCents ?? 0;
+    }
+    return total;
+  }
 
   ReviewState _replace(int index, ReviewRow row) {
     final next = List<ReviewRow>.of(rows);
@@ -165,4 +205,33 @@ class ReviewState {
   /// into the batch.
   ReviewState _settle(int index, ReviewRow row) =>
       _replace(index, row.copyWith(checked: row.isCheckable));
+}
+
+/// The timestamp a screenshot is filed under when the batch is for [day].
+///
+/// The day is hers — it defaults to today and she can change it — and it
+/// wins over whatever the receipt says, so a batch of yesterday's receipts
+/// approved this morning lands on yesterday. The receipt's TIME is kept when
+/// it was read, so the rows still order correctly within the day; without
+/// one, a batch for today takes the current time and any other day noon.
+DateTime transactionDateFor({
+  required DateTime day,
+  required DateTime? parsed,
+  required DateTime now,
+}) {
+  if (parsed != null) {
+    return DateTime(
+      day.year,
+      day.month,
+      day.day,
+      parsed.hour,
+      parsed.minute,
+      parsed.second,
+    );
+  }
+  final isToday =
+      day.year == now.year && day.month == now.month && day.day == now.day;
+  return isToday
+      ? DateTime(day.year, day.month, day.day, now.hour, now.minute, now.second)
+      : DateTime(day.year, day.month, day.day, 12);
 }

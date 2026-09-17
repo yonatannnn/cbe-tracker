@@ -1,4 +1,4 @@
-// App boot tests: the first-run onboarding gate, the 4-tab shell, and the
+// App boot tests: the first-run gates, the 2-tab shell, and the
 // dashboard's live-data wiring.
 //
 // These override the stream providers with plain values rather than booting a
@@ -11,9 +11,11 @@ import 'package:cbe_tracker/app/app.dart';
 import 'package:cbe_tracker/app/theme.dart';
 import 'package:cbe_tracker/data/db/database.dart';
 import 'package:cbe_tracker/data/db/database_provider.dart';
+import 'package:cbe_tracker/data/profiles/profile_provider.dart';
+import 'package:cbe_tracker/data/profiles/profile_store.dart';
 import 'package:cbe_tracker/features/branch_detail/branch_detail_providers.dart';
 import 'package:cbe_tracker/features/dashboard/period.dart';
-import 'package:cbe_tracker/features/reconcile/reconcile_providers.dart';
+import 'package:cbe_tracker/features/reports/daily_bars.dart';
 import 'package:cbe_tracker/features/reports/reports_providers.dart';
 import 'package:cbe_tracker/services/report_service.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +27,21 @@ import 'package:flutter_test/flutter_test.dart';
 class _FixedToday extends Today {
   @override
   DateTime build() => DateTime(2026, 7, 15);
+}
+
+/// A signed-in user, with no registry file on disk.
+class _SignedIn extends Profiles {
+  @override
+  ProfileRegistry build() => const ProfileRegistry(
+    profiles: [Profile(id: 'u1', name: 'Almaz', dir: '')],
+    activeId: 'u1',
+  );
+}
+
+/// Nobody signed in — the very first open.
+class _NobodyYet extends Profiles {
+  @override
+  ProfileRegistry build() => const ProfileRegistry();
 }
 
 void main() {
@@ -42,10 +59,15 @@ void main() {
     int todayDeltaCents = 0,
     int branchBalanceCents = 0,
     int branchTodayCount = 0,
-    int unmatchedSms = 0,
+    bool signedIn = true,
   }) {
     return ProviderScope(
       overrides: [
+        // Who is signed in decides which database would open; here nothing
+        // opens at all, but the router's first gate still needs an answer.
+        profilesProvider.overrideWith(
+          signedIn ? _SignedIn.new : _NobodyYet.new,
+        ),
         // Deterministic day → the default all-time period, no rollover timer.
         todayProvider.overrideWith(_FixedToday.new),
         activeBranchesProvider.overrideWithValue(AsyncValue.data(branches)),
@@ -58,12 +80,6 @@ void main() {
         periodDeltaCentsProvider.overrideWithValue(
           AsyncValue.data(totalCents),
         ),
-        unmatchedSmsCountProvider.overrideWithValue(
-          AsyncValue.data(unmatchedSms),
-        ),
-        // The test host isn't Android, so the real provider would report the
-        // cross-check as off and the strip would show its muted variant.
-        smsCrossCheckActiveProvider.overrideWithValue(true),
         branchBalanceCentsProvider(
           bole.id,
         ).overrideWithValue(AsyncValue.data(branchBalanceCents)),
@@ -78,18 +94,13 @@ void main() {
         branchTransactionsProvider(
           bole.id,
         ).overrideWithValue(const AsyncValue.data([])),
-        // Phase 8's Reports tab likewise.
+        // Phase 8's Reports tab likewise, and its seven-day chart.
+        dailyBarsProvider.overrideWithValue(
+          AsyncValue.data(totalsByDay(const [], DateTime(2026, 7, 15))),
+        ),
         dailyReportProvider.overrideWithValue(
           AsyncValue.data(
-            DailyReport(
-              day: DateTime(2026, 7, 15),
-              branches: const [],
-              footer: const ReconciliationFooter(
-                personalCount: 0,
-                unresolvedCount: 0,
-                crossChecked: true,
-              ),
-            ),
+            DailyReport(day: DateTime(2026, 7, 15), branches: const []),
           ),
         ),
       ],
@@ -98,13 +109,49 @@ void main() {
     );
   }
 
+  group('welcome gate (a user must be signed in first)', () {
+    testWidgets('nobody signed in → welcome asks for a name', (tester) async {
+      await tester.pumpWidget(app(signedIn: false, branches: [bole]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Welcome'), findsOneWidget);
+      expect(find.text('Your name'), findsOneWidget);
+      // Neither onboarding nor the shell is reachable without a user.
+      expect(find.text('Add your branches'), findsNothing);
+      expect(find.text('Reports'), findsNothing);
+    });
+
+    testWidgets('Continue is disabled until a name is typed', (tester) async {
+      await tester.pumpWidget(app(signedIn: false));
+      await tester.pumpAndSettle();
+
+      FilledButton button() => tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Continue'),
+      );
+      expect(button().onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField), 'Almaz');
+      await tester.pump();
+      expect(button().onPressed, isNotNull);
+    });
+
+    testWidgets('a signed-in user with no branches greets her by name', (
+      tester,
+    ) async {
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hi Almaz'), findsOneWidget);
+    });
+  });
+
   group('first-run gate (branch count, not SharedPreferences)', () {
     testWidgets('zero branches → onboarding, not the shell', (tester) async {
       await tester.pumpWidget(app());
       await tester.pumpAndSettle();
 
       expect(find.text('Add your branches'), findsOneWidget);
-      expect(find.text('Reconcile'), findsNothing);
+      expect(find.text('Reports'), findsNothing);
     });
 
     testWidgets('Done is disabled while there are no branches', (tester) async {
@@ -129,15 +176,17 @@ void main() {
   });
 
   group('dashboard', () {
-    testWidgets('boots with 3 tabs — adding is the FAB, not a tab', (
+    testWidgets('boots with 2 tabs — adding is the FAB, not a tab', (
       tester,
     ) async {
       await tester.pumpWidget(app(branches: [bole]));
       await tester.pumpAndSettle();
 
       expect(find.text('Home'), findsOneWidget);
-      expect(find.text('Reconcile'), findsOneWidget);
       expect(find.text('Reports'), findsOneWidget);
+      // No SMS, so no Reconcile tab and no cross-check strip.
+      expect(find.text('Reconcile'), findsNothing);
+      expect(find.textContaining('SMS'), findsNothing);
       // Tabs are destinations; adding is an action. The old 'Add' tab led to a
       // dead placeholder because there was no place for it to go.
       expect(find.widgetWithText(NavigationDestination, 'Add'), findsNothing);
@@ -195,46 +244,6 @@ void main() {
       expect(text.style?.color, AppColors.debit);
     });
 
-    // The reconciliation strip is always present and switches state, rather
-    // than appearing only on trouble (§FR-8 says "banner when unmatched SMS
-    // exist"). Deliberate: the app's whole job is answering "did anything slip
-    // through?", and a hidden banner answers nothing — you can't tell "all
-    // clear" from "the check never ran".
-    testWidgets('strip confirms all-clear when nothing is waiting', (
-      tester,
-    ) async {
-      await tester.pumpWidget(app(branches: [bole]));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('Every CBE message today has a screenshot'),
-        findsOneWidget,
-      );
-      expect(find.byIcon(Icons.check_circle), findsOneWidget);
-      expect(find.byIcon(Icons.error_outline), findsNothing);
-    });
-
-    testWidgets('strip warns, and pluralises, when payments are waiting', (
-      tester,
-    ) async {
-      await tester.pumpWidget(app(branches: [bole], unmatchedSms: 3));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('3 payments texted today have no screenshot'),
-        findsOneWidget,
-      );
-      expect(find.byIcon(Icons.error_outline), findsOneWidget);
-      expect(find.byIcon(Icons.check_circle), findsNothing);
-
-      await tester.pumpWidget(app(branches: [bole], unmatchedSms: 1));
-      await tester.pumpAndSettle();
-      expect(
-        find.text('1 payment texted today has no screenshot'),
-        findsOneWidget,
-      );
-    });
-
     testWidgets('switching to the Reports tab shows Reports', (tester) async {
       await tester.pumpWidget(app(branches: [bole]));
       await tester.pumpAndSettle();
@@ -243,6 +252,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.widgetWithText(AppBar, 'Reports'), findsOneWidget);
+      // The seven-day chart sits above the branch cards, with its legend.
+      expect(find.text('LAST 7 DAYS'), findsOneWidget);
+      expect(find.text('In'), findsOneWidget);
+      expect(find.text('Out'), findsOneWidget);
+      expect(find.text('No transactions in the last 7 days'), findsOneWidget);
     });
 
     testWidgets('FAB opens the add-method sheet', (tester) async {
@@ -268,6 +282,20 @@ void main() {
       // transactions.
       expect(find.widgetWithText(AppBar, 'Bole'), findsOneWidget);
       expect(find.text('No transactions yet'), findsOneWidget);
+      // The main flow starts here: drop the day's screenshots.
+      expect(find.text('Add screenshots'), findsOneWidget);
+    });
+
+    testWidgets('Manage opens the branch management page', (tester) async {
+      await tester.pumpWidget(app(branches: [bole]));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Manage'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(AppBar, 'Branches'), findsOneWidget);
+      expect(find.text('New branch name'), findsOneWidget);
+      expect(find.text('Bole'), findsOneWidget);
     });
   });
 }

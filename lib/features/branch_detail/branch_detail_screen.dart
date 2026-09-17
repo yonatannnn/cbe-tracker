@@ -12,10 +12,8 @@ import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
 import '../../services/service_providers.dart';
-import '../reconcile/reconcile_providers.dart';
 import 'branch_detail_providers.dart';
 import 'day_grouping.dart';
-
 
 class BranchDetailScreen extends ConsumerWidget {
   const BranchDetailScreen({super.key, required this.branchId});
@@ -45,10 +43,22 @@ class BranchDetailScreen extends ConsumerWidget {
             ),
         ],
       ),
-      body: rows.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text("Couldn't load: $error")),
-        data: (items) => _Body(branchId: branchId, items: items),
+      // The main flow (§FR-3): from inside a branch, drop the day's
+      // screenshots and approve what was read.
+      floatingActionButton: FloatingActionButton.extended(
+        // The app theme's FAB shape is a circle for the round "+" buttons;
+        // an extended one needs a pill or the label spills past the edge.
+        shape: const StadiumBorder(),
+        onPressed: () => context.push('/branch/$branchId/add'),
+        icon: const Icon(Icons.add_photo_alternate_outlined),
+        label: const Text('Add screenshots'),
+      ),
+      body: SafeArea(
+        child: rows.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => Center(child: Text("Couldn't load: $error")),
+          data: (items) => _Body(branchId: branchId, items: items),
+        ),
       ),
     );
   }
@@ -120,15 +130,15 @@ class _Body extends ConsumerWidget {
   const _Body({required this.branchId, required this.items});
 
   final int branchId;
-  final List<TransactionWithSms> items;
+  final List<Transaction> items;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (items.isEmpty) return _EmptyState(branchId: branchId);
 
-    final sections = groupByDay<TransactionWithSms>(
+    final sections = groupByDay<Transaction>(
       items: items,
-      dateOf: (item) => item.transaction.transactionDate,
+      dateOf: (item) => item.transactionDate,
       now: DateTime.now(),
     );
 
@@ -156,7 +166,7 @@ class _Body extends ConsumerWidget {
         if (index == 0) return _SummaryCard(branchId: branchId);
         final entry = flat[index - 1];
         if (entry is String) return _DayHeader(label: entry);
-        final day = entry as List<TransactionWithSms>;
+        final day = entry as List<Transaction>;
         return Card(
           child: Column(
             children: [
@@ -270,7 +280,7 @@ class _DayHeader extends StatelessWidget {
 class _TransactionRow extends ConsumerWidget {
   const _TransactionRow({required this.row, required this.isLast});
 
-  final TransactionWithSms row;
+  final Transaction row;
 
   /// Rows share one bordered card per day, so only the last one skips its
   /// divider — a continuous ledger rather than a stack of floating cards.
@@ -278,7 +288,7 @@ class _TransactionRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tx = row.transaction;
+    final tx = row;
     final isCredit = tx.type == TxType.credit;
     final signed = isCredit ? tx.amountCents : -tx.amountCents;
 
@@ -321,24 +331,9 @@ class _TransactionRow extends ConsumerWidget {
                     ],
                   ),
                 ),
-                // The verification column. Every row reports its state in the
-                // same place, so a GAP in the column is what catches the eye —
-                // that gap is a payment with no CBE message behind it. Only
-                // meaningful while the cross-check runs: on iOS or with SMS
-                // skipped every row would show the gap, turning a signal into
-                // permanent noise.
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (ref.watch(smsCrossCheckActiveProvider))
-                      Icon(
-                        row.isVerified ? Icons.verified : Icons.remove,
-                        size: 14,
-                        color: row.isVerified
-                            ? AppColors.credit
-                            : AppColors.line,
-                      ),
-                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       time,
                       style: const TextStyle(
@@ -359,8 +354,8 @@ class _TransactionRow extends ConsumerWidget {
   }
 }
 
-/// Screenshot thumbnail, or a source-appropriate icon when there is none
-/// (SMS-created and manual rows have no image).
+/// Screenshot thumbnail, or a pencil when there is none (manual rows have no
+/// image).
 class _Thumbnail extends ConsumerWidget {
   const _Thumbnail({required this.path, required this.source});
 
@@ -384,11 +379,7 @@ class _Thumbnail extends ConsumerWidget {
           color: scheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(
-          source == TxSource.sms ? Icons.sms_outlined : Icons.edit_outlined,
-          size: 18,
-          color: scheme.outline,
-        ),
+        child: Icon(Icons.edit_outlined, size: 18, color: scheme.outline),
       );
     }
 
@@ -435,7 +426,8 @@ class _EmptyState extends ConsumerWidget {
             Text('No transactions yet', style: theme.textTheme.titleMedium),
             const SizedBox(height: 6),
             Text(
-              'Add a CBE screenshot from the dashboard and it will appear here.',
+              "Tap Add screenshots, drop the day's CBE receipts, and approve "
+              'what was read.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.outline,

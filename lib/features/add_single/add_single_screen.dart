@@ -21,7 +21,6 @@ import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
 import '../../services/parse_pipeline.dart';
 import '../../services/service_providers.dart';
-import '../reconcile/reconcile_providers.dart';
 import '../shared/branch_chips.dart';
 import '../shared/manual_entry_fields.dart';
 
@@ -188,8 +187,6 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
     if (!mounted) return;
 
     await ref.read(settingsDaoProvider).setLastBranchId(branchId);
-    // A CBE SMS for this transaction may already be waiting (§FR-5).
-    await ref.read(reconcileServiceProvider).reconcile();
     if (!mounted) return;
 
     final branches = ref.read(activeBranchesProvider).value ?? const <Branch>[];
@@ -242,22 +239,24 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Single screenshot')),
-      body: _busy
-          ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 12),
-                  Text('Reading screenshot…'),
-                ],
-              ),
-            )
-          : switch (_outcome) {
-              ParseSuccess(:final parsed) => _buildSuccess(parsed),
-              ParseUnreadable() => _buildUnreadable(),
-              _ => const SizedBox.shrink(),
-            },
+      body: SafeArea(
+        child: _busy
+            ? const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 12),
+                    Text('Reading screenshot…'),
+                  ],
+                ),
+              )
+            : switch (_outcome) {
+                ParseSuccess(:final parsed) => _buildSuccess(parsed),
+                ParseUnreadable() => _buildUnreadable(),
+                _ => const SizedBox.shrink(),
+              },
+      ),
     );
   }
 
@@ -399,7 +398,6 @@ class _SummaryCard extends ConsumerWidget {
     final isCredit = parsed.type == TxType.credit;
     final signed = isCredit ? parsed.amountCents : -parsed.amountCents;
     final color = isCredit ? AppColors.credit : theme.colorScheme.error;
-    final smsVerified = ref.watch(smsVerifiedProvider(parsed.reference)).value;
 
     return Card(
       child: Padding(
@@ -452,35 +450,11 @@ class _SummaryCard extends ConsumerWidget {
                 ),
               ),
             ],
-            // Shown when a CBE SMS with this reference is already in the
-            // shadow ledger — confirmation the screenshot is genuine (§FR-2).
-            if (smsVerified != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.verified,
-                    size: 16,
-                    color: AppColors.credit,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Verified against SMS, ${_hhmm(smsVerified.receivedAt)}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ],
           ],
         ),
       ),
     );
   }
-}
-
-String _hhmm(DateTime moment) {
-  String two(int v) => v.toString().padLeft(2, '0');
-  return '${two(moment.hour)}:${two(moment.minute)}';
 }
 
 class _AiBadge extends StatelessWidget {

@@ -13,7 +13,6 @@ import '../../core/parser/cbe_parser.dart';
 import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../services/service_providers.dart';
-import '../reconcile/reconcile_providers.dart';
 import '../shared/manual_entry_fields.dart';
 import 'branch_detail_providers.dart';
 
@@ -28,12 +27,14 @@ class TransactionDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Transaction')),
-      body: row.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text("Couldn't load: $error")),
-        data: (found) => found == null
-            ? const Center(child: Text('This transaction no longer exists.'))
-            : _Body(row: found),
+      body: SafeArea(
+        child: row.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => Center(child: Text("Couldn't load: $error")),
+          data: (found) => found == null
+              ? const Center(child: Text('This transaction no longer exists.'))
+              : _Body(row: found),
+        ),
       ),
     );
   }
@@ -42,7 +43,7 @@ class TransactionDetailScreen extends ConsumerWidget {
 class _Body extends ConsumerStatefulWidget {
   const _Body({required this.row});
 
-  final TransactionWithSms row;
+  final Transaction row;
 
   @override
   ConsumerState<_Body> createState() => _BodyState();
@@ -53,13 +54,13 @@ class _BodyState extends ConsumerState<_Body> {
   bool _showOcr = false;
 
   // Edit buffer, seeded from the stored values.
-  late int? _cents = widget.row.transaction.amountCents;
-  late TxType _type = widget.row.transaction.type;
-  late String _reference = widget.row.transaction.reference;
-  late int _branchId = widget.row.transaction.branchId;
+  late int? _cents = widget.row.amountCents;
+  late TxType _type = widget.row.type;
+  late String _reference = widget.row.reference;
+  late int _branchId = widget.row.branchId;
   String? _error;
 
-  Transaction get _tx => widget.row.transaction;
+  Transaction get _tx => widget.row;
 
   /// Throws away an abandoned edit.
   ///
@@ -87,15 +88,17 @@ class _BodyState extends ConsumerState<_Body> {
     }
 
     try {
-      await ref.read(transactionDaoProvider).updateTransaction(
-        _tx.id,
-        TransactionsCompanion(
-          amountCents: Value(cents),
-          type: Value(_type),
-          reference: Value(reference),
-          branchId: Value(_branchId),
-        ),
-      );
+      await ref
+          .read(transactionDaoProvider)
+          .updateTransaction(
+            _tx.id,
+            TransactionsCompanion(
+              amountCents: Value(cents),
+              type: Value(_type),
+              reference: Value(reference),
+              branchId: Value(_branchId),
+            ),
+          );
     } on Object catch (error) {
       if (!mounted) return;
       // Only a UNIQUE violation means the reference is taken. Blaming the
@@ -110,8 +113,6 @@ class _BodyState extends ConsumerState<_Body> {
       return;
     }
 
-    // The edit may have created (or broken) an SMS match.
-    await ref.read(reconcileServiceProvider).reconcile();
     ref.read(transactionRevisionProvider.notifier).bump();
     if (!mounted) return;
     setState(() {
@@ -129,8 +130,7 @@ class _BodyState extends ConsumerState<_Body> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete this transaction?'),
         content: const Text(
-          "The branch balance will be recalculated without it. If a CBE "
-          "message was matched to it, that message returns to Reconcile.",
+          'The branch balance will be recalculated without it.',
         ),
         actions: [
           TextButton(
@@ -157,7 +157,8 @@ class _BodyState extends ConsumerState<_Body> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final branches = ref.watch(activeBranchesProvider).value ?? const <Branch>[];
+    final branches =
+        ref.watch(activeBranchesProvider).value ?? const <Branch>[];
     final isCredit = _tx.type == TxType.credit;
     final signed = isCredit ? _tx.amountCents : -_tx.amountCents;
 
@@ -181,29 +182,14 @@ class _BodyState extends ConsumerState<_Body> {
         _Field(label: 'Date', value: _formatDateTime(_tx.transactionDate)),
         _Field(
           label: 'Branch',
-          value: branches
-              .where((b) => b.id == _tx.branchId)
-              .map((b) => b.name)
-              .firstOrNull ??
+          value:
+              branches
+                  .where((b) => b.id == _tx.branchId)
+                  .map((b) => b.name)
+                  .firstOrNull ??
               'Archived branch',
         ),
         _Field(label: 'Source', value: _tx.source.name),
-
-        if (widget.row.sms != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                const Icon(Icons.verified, size: 16, color: AppColors.credit),
-                const SizedBox(width: 6),
-                Text(
-                  'Verified against SMS, '
-                  '${_formatTime(widget.row.sms!.receivedAt)}',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
 
         const Divider(height: 32),
 
@@ -341,9 +327,7 @@ class _FullScreenshot extends ConsumerWidget {
             errorBuilder: (context, _, _) => Container(
               height: 160,
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: const Center(
-                child: Text('Screenshot file is missing'),
-              ),
+              child: const Center(child: Text('Screenshot file is missing')),
             ),
           ),
         ),

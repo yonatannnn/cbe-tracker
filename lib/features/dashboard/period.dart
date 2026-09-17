@@ -23,12 +23,7 @@ enum PeriodKind { today, thisWeek, thisMonth, allTime, day, range }
 /// money that moved inside a window; the UI signs and colours the two
 /// differently on that basis.
 class Period {
-  const Period({
-    required this.kind,
-    required this.label,
-    this.start,
-    this.end,
-  });
+  const Period({required this.kind, required this.label, this.start, this.end});
 
   final PeriodKind kind;
   final String label;
@@ -132,10 +127,7 @@ Period resolvePeriod(PeriodSelection selection, DateTime today) {
         end: tomorrow,
       );
     case PeriodKind.allTime:
-      return const Period(
-        kind: PeriodKind.allTime,
-        label: 'All time',
-      );
+      return const Period(kind: PeriodKind.allTime, label: 'All time');
     case PeriodKind.day:
       final day = selection.anchor ?? today;
       return Period(
@@ -158,8 +150,18 @@ Period resolvePeriod(PeriodSelection selection, DateTime today) {
 }
 
 const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
 String _formatDay(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
@@ -182,8 +184,10 @@ final periodDeltaCentsProvider = StreamProvider.autoDispose<int>((ref) {
 
 /// One branch's credits − debits for the selected window (its balance when the
 /// window is "all time").
-final branchPeriodDeltaProvider =
-    StreamProvider.autoDispose.family<int, int>((ref, branchId) {
+final branchPeriodDeltaProvider = StreamProvider.autoDispose.family<int, int>((
+  ref,
+  branchId,
+) {
   final period = ref.watch(activePeriodProvider);
   return ref
       .watch(transactionDaoProvider)
@@ -191,8 +195,10 @@ final branchPeriodDeltaProvider =
 });
 
 /// One branch's transaction count for the selected window.
-final branchPeriodCountProvider =
-    StreamProvider.autoDispose.family<int, int>((ref, branchId) {
+final branchPeriodCountProvider = StreamProvider.autoDispose.family<int, int>((
+  ref,
+  branchId,
+) {
   final period = ref.watch(activePeriodProvider);
   return ref
       .watch(transactionDaoProvider)

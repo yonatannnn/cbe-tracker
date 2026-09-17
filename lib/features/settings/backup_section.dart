@@ -76,10 +76,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
       // Straight to the share sheet: a backup sitting in a temp folder on the
       // same phone protects against nothing.
       await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path)],
-          subject: 'CBE Tracker backup',
-        ),
+        ShareParams(files: [XFile(file.path)], subject: 'CBE Tracker backup'),
       );
     } on Object catch (error) {
       _say(error is BackupException ? '$error' : "Couldn't make the backup.");
@@ -94,7 +91,11 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     // have to find. inspect() rejects anything that isn't really a backup.
     final picked = await openFile(
       acceptedTypeGroups: const [
-        XTypeGroup(label: 'Backup', extensions: ['zip'], mimeTypes: ['application/zip']),
+        XTypeGroup(
+          label: 'Backup',
+          extensions: ['zip'],
+          mimeTypes: ['application/zip'],
+        ),
       ],
     );
     if (picked == null || !mounted) return;
@@ -140,10 +141,15 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           children: [
             const Text('This file holds:'),
             const SizedBox(height: AppSpacing.sm),
-            _Line('${summary.branches} ${_plural(summary.branches, 'branch', 'branches')}'),
-            _Line('${summary.transactions} ${_plural(summary.transactions, 'transaction', 'transactions')}'),
-            _Line('${summary.smsMessages} CBE ${_plural(summary.smsMessages, 'message', 'messages')}'),
-            _Line('${summary.images} ${_plural(summary.images, 'screenshot', 'screenshots')}'),
+            _Line(
+              '${summary.branches} ${_plural(summary.branches, 'branch', 'branches')}',
+            ),
+            _Line(
+              '${summary.transactions} ${_plural(summary.transactions, 'transaction', 'transactions')}',
+            ),
+            _Line(
+              '${summary.images} ${_plural(summary.images, 'screenshot', 'screenshots')}',
+            ),
             const SizedBox(height: AppSpacing.md),
             Text(
               'Everything currently on this phone is replaced and cannot be '
@@ -172,7 +178,9 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
 
   void _say(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

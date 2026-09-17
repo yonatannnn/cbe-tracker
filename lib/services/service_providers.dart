@@ -1,12 +1,11 @@
 /// Riverpod wiring for the OCR / AI / pipeline services (§6).
 library;
 
-import 'dart:io';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/db/database_provider.dart';
+import '../data/profiles/profile_provider.dart';
 import 'backup_service.dart';
 import 'cloud_backup_service.dart';
 import 'gemini_fallback_service.dart';
@@ -14,6 +13,8 @@ import 'image_store.dart';
 import 'ocr_service.dart';
 import 'parse_pipeline.dart';
 import 'supabase_config.dart';
+
+export '../data/profiles/profile_provider.dart' show appDocsDirProvider;
 
 final ocrServiceProvider = Provider<OcrService>((ref) {
   final service = MlKitOcrService();
@@ -38,18 +39,11 @@ final lastBranchIdProvider = StreamProvider<int?>(
   (ref) => ref.watch(settingsDaoProvider).watchLastBranchId(),
 );
 
-/// The app documents directory — where the database and screenshots live.
-///
-/// Resolving it is async, so main() looks it up once and overrides this;
-/// nothing downstream has to await a directory. Throwing here rather than
-/// returning a guess means a missing override fails loudly at startup instead
-/// of silently writing images somewhere the backup will never find them.
-final appDocsDirProvider = Provider<Directory>(
-  (ref) => throw UnimplementedError('appDocsDirProvider must be overridden'),
-);
-
+/// Screenshots live in the ACTIVE USER's directory, beside her database, so
+/// two users' evidence never mixes and a backup of one never carries the
+/// other's images.
 final imageStoreProvider = Provider<ImageStore>(
-  (ref) => ImageStore(ref.watch(appDocsDirProvider)),
+  (ref) => ImageStore(ref.watch(profileDirProvider)),
 );
 
 final backupServiceProvider = Provider<BackupService>(

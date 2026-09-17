@@ -8,17 +8,19 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../profiles/profile_provider.dart';
 import 'daos/branch_dao.dart';
 import 'daos/settings_dao.dart';
-import 'daos/sms_dao.dart';
 import 'daos/transaction_dao.dart';
 import 'database.dart';
 
-/// The single app-wide Drift database.
+/// The signed-in user's Drift database.
 ///
-/// Overridden in tests with `AppDatabase.forTesting(NativeDatabase.memory())`.
+/// Watches the profile directory, so switching user closes this one and opens
+/// hers — every DAO and stream below rebuilds with it. Overridden in tests
+/// with `AppDatabase.forTesting(NativeDatabase.memory())`.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
-  final db = AppDatabase();
+  final db = AppDatabase.inDirectory(ref.watch(profileDirProvider));
   ref.onDispose(db.close);
   return db;
 });
@@ -29,10 +31,6 @@ final branchDaoProvider = Provider<BranchDao>(
 
 final transactionDaoProvider = Provider<TransactionDao>(
   (ref) => ref.watch(appDatabaseProvider).transactionDao,
-);
-
-final smsDaoProvider = Provider<SmsDao>(
-  (ref) => ref.watch(appDatabaseProvider).smsDao,
 );
 
 final settingsDaoProvider = Provider<SettingsDao>(
@@ -62,7 +60,7 @@ final branchBalanceCentsProvider = StreamProvider.autoDispose.family<int, int>(
 /// The current calendar day, refreshed as the day actually rolls over.
 ///
 /// Lives here — the neutral providers hub — rather than in a feature, because
-/// the dashboard, the reports tab and the reconcile banner all read it. It
+/// the dashboard and the reports tab both read it. It
 /// ticks at the next local midnight and is refreshed on app resume, so nothing
 /// downstream has to call `DateTime.now()` and freeze the day at launch.
 class Today extends Notifier<DateTime> {

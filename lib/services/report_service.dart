@@ -6,7 +6,6 @@
 library;
 
 import '../data/db/daos/branch_dao.dart';
-import '../data/db/daos/sms_dao.dart';
 import '../data/db/daos/transaction_dao.dart';
 import '../data/db/database.dart';
 
@@ -15,7 +14,6 @@ class BranchDayReport {
   const BranchDayReport({
     required this.branch,
     required this.summary,
-    required this.verifiedCount,
     required this.transactions,
   });
 
@@ -24,55 +22,20 @@ class BranchDayReport {
   /// opening / credited / debited / closing / txCount, all integer cents.
   final DailySummary summary;
 
-  /// How many of the day's transactions a CBE SMS corroborates.
-  final int verifiedCount;
-
   /// The day's transactions, newest first — the PDF's per-branch list.
-  final List<TransactionWithSms> transactions;
+  final List<Transaction> transactions;
 
   int get totalCount => summary.txCount;
-
-  /// "12/12" — green when all are verified, amber when partial (§FR-6).
-  String get verificationLabel => '$verifiedCount/$totalCount';
-
-  /// True only when there IS something to verify and all of it is.
-  bool get isFullyVerified => totalCount > 0 && verifiedCount == totalCount;
 
   bool get hasTransactions => totalCount > 0;
 }
 
-/// "n SMS marked personal · n unresolved" (§FR-6).
-class ReconciliationFooter {
-  const ReconciliationFooter({
-    required this.personalCount,
-    required this.unresolvedCount,
-    required this.crossChecked,
-  });
-
-  final int personalCount;
-  final int unresolvedCount;
-
-  /// Whether the SMS cross-check actually ran. On iOS, or with SMS permission
-  /// skipped, "0 unresolved" would read as "everything checked out" when in
-  /// truth nothing was ever checked — and this line is baked into every shared
-  /// PDF, so the recipient can't ask. False here swaps the counts for an
-  /// honest "not available".
-  final bool crossChecked;
-
-  bool get isEmpty => personalCount == 0 && unresolvedCount == 0;
-}
-
 /// A whole day, across every active branch.
 class DailyReport {
-  const DailyReport({
-    required this.day,
-    required this.branches,
-    required this.footer,
-  });
+  const DailyReport({required this.day, required this.branches});
 
   final DateTime day;
   final List<BranchDayReport> branches;
-  final ReconciliationFooter footer;
 
   int get totalClosingCents =>
       branches.fold(0, (sum, b) => sum + b.summary.closingCents);
@@ -86,33 +49,19 @@ class DailyReport {
   int get totalTransactionCount =>
       branches.fold(0, (sum, b) => sum + b.totalCount);
 
-  int get totalVerifiedCount =>
-      branches.fold(0, (sum, b) => sum + b.verifiedCount);
-
   /// Branches that actually moved money — the PDF skips silent ones.
   List<BranchDayReport> get activeBranches =>
       branches.where((b) => b.hasTransactions).toList(growable: false);
 }
 
 class ReportService {
-  ReportService({
-    required this.branchDao,
-    required this.transactionDao,
-    required this.smsDao,
-  });
+  ReportService({required this.branchDao, required this.transactionDao});
 
   final BranchDao branchDao;
   final TransactionDao transactionDao;
-  final SmsDao smsDao;
 
   /// The full report for [day], every active branch.
-  ///
-  /// [crossChecked] is whether SMS verification is running on this device —
-  /// the caller knows (platform + permission), this service doesn't.
-  Future<DailyReport> dailyReport(
-    DateTime day, {
-    required bool crossChecked,
-  }) async {
+  Future<DailyReport> dailyReport(DateTime day) async {
     final start = DateTime(day.year, day.month, day.day);
     final end = start.add(const Duration(days: 1));
 
@@ -131,29 +80,11 @@ class ReportService {
         BranchDayReport(
           branch: branch,
           summary: summary,
-          verifiedCount: transactions.where((t) => t.isVerified).length,
           transactions: transactions,
         ),
       );
     }
 
-    return DailyReport(
-      day: start,
-      branches: reports,
-      footer: await reconciliationFooter(start, crossChecked: crossChecked),
-    );
-  }
-
-  /// Personal / unresolved SMS counts for [day].
-  Future<ReconciliationFooter> reconciliationFooter(
-    DateTime day, {
-    required bool crossChecked,
-  }) async {
-    final counts = await smsDao.footerCountsForDay(day);
-    return ReconciliationFooter(
-      personalCount: counts.personal,
-      unresolvedCount: counts.unresolved,
-      crossChecked: crossChecked,
-    );
+    return DailyReport(day: start, branches: reports);
   }
 }

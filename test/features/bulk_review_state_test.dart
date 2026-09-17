@@ -40,10 +40,11 @@ void main() {
     createdAt: DateTime(2026, 7, 13, 9, 0),
   );
 
-  BulkItem ok() => BulkItem.ok(image, parsed());
-  BulkItem ai() => BulkItem.okAiParsed(
+  BulkItem ok({int cents = 500000, TxType type = TxType.credit}) =>
+      BulkItem.ok(image, parsed(cents: cents, type: type));
+  BulkItem ai({int cents = 500000}) => BulkItem.okAiParsed(
     image,
-    parsed(confidence: Confidence.aiParsed, reference: null),
+    parsed(cents: cents, confidence: Confidence.aiParsed, reference: null),
   );
   BulkItem dup() => BulkItem.duplicate(image, parsed(), existingTx());
   BulkItem failed() => BulkItem.failed(image, 'unreadable text');
@@ -81,11 +82,11 @@ void main() {
 
   group('save button', () {
     test('label states the exact count and pluralises', () {
-      expect(ReviewState.initial([ai()]).saveLabel, 'Save 0 transactions');
-      expect(ReviewState.initial([ok()]).saveLabel, 'Save 1 transaction');
+      expect(ReviewState.initial([ai()]).saveLabel, 'Approve 0 transactions');
+      expect(ReviewState.initial([ok()]).saveLabel, 'Approve 1 transaction');
       expect(
         ReviewState.initial([ok(), ok(), ok(), ok(), ok()]).saveLabel,
-        'Save 5 transactions',
+        'Approve 5 transactions',
       );
     });
 
@@ -96,14 +97,14 @@ void main() {
 
     test('label tracks toggles live', () {
       var state = ReviewState.initial([ok(), ok(), ok()]);
-      expect(state.saveLabel, 'Save 3 transactions');
+      expect(state.saveLabel, 'Approve 3 transactions');
 
       state = state.toggle(0, checked: false);
-      expect(state.saveLabel, 'Save 2 transactions');
+      expect(state.saveLabel, 'Approve 2 transactions');
 
       state = state.toggle(1, checked: false);
       state = state.toggle(2, checked: false);
-      expect(state.saveLabel, 'Save 0 transactions');
+      expect(state.saveLabel, 'Approve 0 transactions');
       expect(state.canSave, isFalse);
     });
   });
@@ -148,7 +149,7 @@ void main() {
       expect(state.rows.single.isCheckable, isTrue);
       expect(state.rows.single.checked, isTrue);
       expect(state.checkedCount, 1);
-      expect(state.saveLabel, 'Save 1 transaction');
+      expect(state.saveLabel, 'Approve 1 transaction');
     });
 
     test('clearing the amount un-checks it again', () {
@@ -224,6 +225,103 @@ void main() {
       expect(original.checkedCount, 1);
       expect(toggled.checkedCount, 0);
       expect(identical(original, toggled), isFalse);
+    });
+  });
+
+  group('approval summary', () {
+    test('counts what was read, in either way, against the total', () {
+      final state = ReviewState.initial([ok(), ai(), dup(), failed()]);
+      expect(state.readCount, 3, reason: 'a duplicate was still read');
+      expect(state.duplicateCount, 1);
+      expect(state.failedCount, 1);
+    });
+
+    test('sums only checked rows, credits and debits apart, in cents', () {
+      var state = ReviewState.initial([
+        ok(cents: 500000),
+        ok(cents: 250000, type: TxType.debit),
+        ai(cents: 100000), // starts unchecked
+        dup(), // never counted
+      ]);
+      expect(state.creditCents, 500000);
+      expect(state.debitCents, 250000);
+      expect(state.netCents, 250000);
+
+      state = state.toggle(2, checked: true);
+      expect(state.creditCents, 600000);
+      expect(state.netCents, 350000);
+
+      state = state.toggle(0, checked: false);
+      expect(state.creditCents, 100000);
+      expect(state.netCents, -150000);
+    });
+
+    test('a filled-in failed row joins the sum', () {
+      var state = ReviewState.initial([failed()]);
+      expect(state.netCents, 0);
+      state = state.editAmount(0, 75000);
+      state = state.editType(0, TxType.debit);
+      expect(state.debitCents, 75000);
+      expect(state.netCents, -75000);
+    });
+  });
+
+  group('transactionDateFor', () {
+    final now = DateTime(2026, 9, 17, 21, 5, 9);
+
+    test("the chosen day wins over the receipt's date, keeping its time", () {
+      final date = transactionDateFor(
+        day: DateTime(2026, 9, 16),
+        parsed: DateTime(2026, 9, 10, 14, 30, 5),
+        now: now,
+      );
+      expect(date, DateTime(2026, 9, 16, 14, 30, 5));
+    });
+
+    test('no receipt time and today → the current time', () {
+      final date = transactionDateFor(
+        day: DateTime(2026, 9, 17),
+        parsed: null,
+        now: now,
+      );
+      expect(date, DateTime(2026, 9, 17, 21, 5, 9));
+    });
+
+    test('no receipt time and another day → noon', () {
+      final date = transactionDateFor(
+        day: DateTime(2026, 9, 1),
+        parsed: null,
+        now: now,
+      );
+      expect(date, DateTime(2026, 9, 1, 12));
+    });
+  });
+
+  group('reference collisions', () {
+    test('two checked rows sharing a reference block the save', () {
+      final state = ReviewState.initial([
+        BulkItem.ok(image, parsed(reference: 'FT26SAME')),
+        BulkItem.ok(image, parsed(reference: 'FT26SAME')),
+      ]);
+      expect(state.conflictingReference, 'FT26SAME');
+      expect(state.canSave, isFalse);
+      // Unticking one clears it.
+      final fixed = state.toggle(1, checked: false);
+      expect(fixed.conflictingReference, isNull);
+      expect(fixed.canSave, isTrue);
+    });
+
+    test('a manual reference typed to match another row is caught', () {
+      var state = ReviewState.initial([
+        BulkItem.ok(image, parsed(reference: 'FT26AAAA')),
+        failed(),
+      ]);
+      state = state.editAmount(1, 1000);
+      state = state.editType(1, TxType.debit);
+      state = state.editReference(1, 'FT26AAAA');
+      expect(state.checkedCount, 2);
+      expect(state.conflictingReference, 'FT26AAAA');
+      expect(state.canSave, isFalse);
     });
   });
 }

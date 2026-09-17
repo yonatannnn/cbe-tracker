@@ -1,17 +1,18 @@
-/// Settings: branches and the daily report reminder (§FR-6).
+/// Settings: who is signed in, branches, and the daily report reminder (§FR-6).
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../data/db/database_provider.dart';
+import '../../data/profiles/profile_provider.dart';
 import '../../services/notification_service.dart';
 import '../../services/supabase_config.dart';
 import '../reports/reports_providers.dart';
 import 'backup_section.dart';
 import 'cloud_backup_section.dart';
-import 'manage_branches_sheet.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -19,73 +20,146 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reminder = ref.watch(reminderTimeProvider).value;
+    final registry = ref.watch(profilesProvider);
+    final me = registry.active;
+    final others = registry.profiles.where((p) => p.id != me?.id).toList();
     final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        children: [
-          const _SectionHeader('Branches'),
-          ListTile(
-            leading: const Icon(Icons.store_outlined),
-            title: const Text('Manage branches'),
-            subtitle: const Text('Add, rename, archive'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => showManageBranchesSheet(context),
-          ),
-          const Divider(),
-          const _SectionHeader('Daily reminder'),
-          SwitchListTile(
-            secondary: const Icon(Icons.notifications_outlined),
-            title: const Text('Remind me to generate reports'),
-            subtitle: Text(
-              reminder == null
-                  ? 'Off'
-                  : 'Every day at ${reminder.display}',
+      body: SafeArea(
+        child: ListView(
+          children: [
+            const _SectionHeader('User'),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: Text(me?.name ?? 'Nobody signed in'),
+              subtitle: const Text(
+                'Branches and transactions are kept per user',
+              ),
             ),
-            value: reminder != null,
-            onChanged: (enabled) => _toggle(context, ref, enabled: enabled),
-          ),
-          if (reminder != null)
+            for (final other in others)
+              ListTile(
+                leading: const SizedBox(width: 24),
+                title: Text('Switch to ${other.name}'),
+                trailing: const Icon(Icons.swap_horiz),
+                onTap: () => _switchUser(context, ref, other.id),
+              ),
             ListTile(
               leading: const SizedBox(width: 24),
-              title: const Text('Reminder time'),
-              trailing: Text(
-                reminder.display,
-                style: theme.textTheme.titleMedium,
-              ),
-              onTap: () => _pickTime(context, ref, reminder),
+              title: const Text('Add another user'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/welcome'),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.xs,
-              AppSpacing.lg,
-              AppSpacing.lg,
+            ListTile(
+              leading: const SizedBox(width: 24),
+              title: const Text('Sign out'),
+              subtitle: const Text('Your data stays on this phone'),
+              trailing: const Icon(Icons.logout),
+              onTap: () => _signOut(context, ref),
             ),
-            child: Text(
-              'A notification at the end of the day, so a branch never goes '
-              'unreported.',
-              style: AppTextStyles.label.copyWith(
-                letterSpacing: 0,
-                height: 1.45,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ),
-          const Divider(),
-          const _SectionHeader('Backup'),
-          const BackupSection(),
-          // Only when a Supabase project was wired in at build time; otherwise
-          // the whole cloud feature stays hidden.
-          if (SupabaseConfig.isConfigured) ...[
             const Divider(),
-            const _SectionHeader('Cloud backup'),
-            const CloudBackupSection(),
+            const _SectionHeader('Branches'),
+            ListTile(
+              leading: const Icon(Icons.store_outlined),
+              title: const Text('Manage branches'),
+              subtitle: const Text('Add, rename, archive'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/branches'),
+            ),
+            const Divider(),
+            const _SectionHeader('Daily reminder'),
+            SwitchListTile(
+              secondary: const Icon(Icons.notifications_outlined),
+              title: const Text('Remind me to generate reports'),
+              subtitle: Text(
+                reminder == null ? 'Off' : 'Every day at ${reminder.display}',
+              ),
+              value: reminder != null,
+              onChanged: (enabled) => _toggle(context, ref, enabled: enabled),
+            ),
+            if (reminder != null)
+              ListTile(
+                leading: const SizedBox(width: 24),
+                title: const Text('Reminder time'),
+                trailing: Text(
+                  reminder.display,
+                  style: theme.textTheme.titleMedium,
+                ),
+                onTap: () => _pickTime(context, ref, reminder),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.xs,
+                AppSpacing.lg,
+                AppSpacing.lg,
+              ),
+              child: Text(
+                'A notification at the end of the day, so a branch never goes '
+                'unreported.',
+                style: AppTextStyles.label.copyWith(
+                  letterSpacing: 0,
+                  height: 1.45,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            const Divider(),
+            const _SectionHeader('Backup'),
+            const BackupSection(),
+            // Only when a Supabase project was wired in at build time; otherwise
+            // the whole cloud feature stays hidden.
+            if (SupabaseConfig.isConfigured) ...[
+              const Divider(),
+              const _SectionHeader('Cloud backup'),
+              const CloudBackupSection(),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Switches books. The database provider follows the profile, so every
+  /// screen rebuilds on hers; going home drops the settings stack, which was
+  /// built against the previous user's data.
+  Future<void> _switchUser(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+  ) async {
+    await ref.read(profilesProvider.notifier).switchTo(id);
+    if (context.mounted) context.go('/home');
+  }
+
+  /// Nobody signed in → the router's first gate shows the welcome screen.
+  /// Going there explicitly (rather than waiting for the redirect) drops the
+  /// settings stack, which was built against the signed-out user's data.
+  Future<void> _signOut(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'Your branches and transactions stay on this phone. Type your name '
+          'on the welcome screen to get back to them.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Sign out'),
+          ),
         ],
       ),
     );
+    if (!(confirmed ?? false) || !context.mounted) return;
+    await ref.read(profilesProvider.notifier).signOut();
+    if (context.mounted) context.go('/welcome');
   }
 
   Future<void> _toggle(

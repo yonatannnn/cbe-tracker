@@ -64,8 +64,6 @@ class PdfService {
           ],
           if (report.activeBranches.isEmpty)
             pw.Text('No transactions were recorded on this day.'),
-          pw.SizedBox(height: 8),
-          _footer(report.footer),
         ],
       ),
     );
@@ -74,11 +72,7 @@ class PdfService {
   }
 
   /// One PDF for a single branch.
-  Future<File> buildForBranch(
-    BranchDayReport branch,
-    DateTime day,
-    ReconciliationFooter footer,
-  ) async {
+  Future<File> buildForBranch(BranchDayReport branch, DateTime day) async {
     final fonts = await _ReportFonts.load();
     final doc = pw.Document(
       theme: pw.ThemeData.withFont(base: fonts.regular, bold: fonts.bold),
@@ -91,8 +85,6 @@ class PdfService {
           _title(day, branch.branch.name),
           pw.SizedBox(height: 16),
           _branchSection(branch),
-          pw.SizedBox(height: 12),
-          _footer(footer),
         ],
       ),
     );
@@ -187,13 +179,9 @@ class PdfService {
               style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
             ),
             pw.Text(
-              '${branch.verificationLabel} verified',
-              style: pw.TextStyle(
-                fontSize: 9,
-                color: branch.isFullyVerified
-                    ? PdfColors.green800
-                    : PdfColors.orange800,
-              ),
+              '${branch.totalCount} '
+              '${branch.totalCount == 1 ? 'transaction' : 'transactions'}',
+              style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
             ),
           ],
         ),
@@ -247,18 +235,15 @@ class PdfService {
 
   pw.Widget _transactionsTable(BranchDayReport branch) {
     return pw.TableHelper.fromTextArray(
-      headers: const ['Time', 'Amount', 'Reference', 'SMS'],
+      headers: const ['Time', 'Amount', 'Reference'],
       data: [
         for (final row in branch.transactions)
           [
-            _time(row.transaction.transactionDate),
+            _time(row.transactionDate),
             formatSignedCents(
-              row.transaction.type == TxType.credit
-                  ? row.transaction.amountCents
-                  : -row.transaction.amountCents,
+              row.type == TxType.credit ? row.amountCents : -row.amountCents,
             ),
-            row.transaction.reference,
-            row.isVerified ? 'verified' : '—',
+            row.reference,
           ],
       ],
       headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
@@ -268,33 +253,12 @@ class PdfService {
         0: pw.Alignment.centerLeft,
         1: pw.Alignment.centerRight,
         2: pw.Alignment.centerLeft,
-        3: pw.Alignment.center,
       },
       columnWidths: {
         0: const pw.FlexColumnWidth(1.2),
         1: const pw.FlexColumnWidth(2),
         2: const pw.FlexColumnWidth(3),
-        3: const pw.FlexColumnWidth(1.3),
       },
-    );
-  }
-
-  pw.Widget _footer(ReconciliationFooter footer) {
-    // A PDF gets forwarded — its reader can't ask what "0 unresolved" means.
-    // When the SMS cross-check never ran, printing counts would present an
-    // unchecked day as a verified one.
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Divider(),
-        pw.Text(
-          footer.crossChecked
-              ? '${footer.personalCount} SMS marked personal · '
-                    '${footer.unresolvedCount} unresolved'
-              : 'SMS cross-check not active — screenshot records only',
-          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
-        ),
-      ],
     );
   }
 

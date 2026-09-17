@@ -1,5 +1,9 @@
-/// Bulk upload flow: branch → images → sequential OCR → review (§8 Phase 5,
-/// FR-3).
+/// Bulk upload flow: branch → day → images → sequential OCR → approval (§8
+/// Phase 5, FR-3).
+///
+/// Opened from inside a branch (the main flow) the branch step is skipped:
+/// she drops the day's screenshots, the app reads them, and she approves.
+/// The day defaults to today and can be changed before reading.
 library;
 
 import 'dart:io';
@@ -9,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/dates/day_format.dart';
 import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../services/bulk_processor.dart';
@@ -20,17 +25,44 @@ import 'bulk_review_modal.dart';
 enum _Step { pickBranch, pickImages, processing }
 
 class BulkAddScreen extends ConsumerStatefulWidget {
-  const BulkAddScreen({super.key});
+  const BulkAddScreen({super.key, this.initialBranchId});
+
+  /// When set, the branch is already chosen and the flow opens on the image
+  /// step (§FR-3 main flow: from inside a branch).
+  final int? initialBranchId;
 
   @override
   ConsumerState<BulkAddScreen> createState() => _BulkAddScreenState();
 }
 
 class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
-  _Step _step = _Step.pickBranch;
-  int? _branchId;
+  late _Step _step = widget.initialBranchId == null
+      ? _Step.pickBranch
+      : _Step.pickImages;
+  late int? _branchId = widget.initialBranchId;
   final _images = <File>[];
   BulkProgress? _progress;
+
+  /// The calendar day the batch is filed under. Defaults to today.
+  DateTime? _day;
+
+  DateTime get _today => ref.read(todayProvider);
+
+  DateTime get _effectiveDay => _day ?? _today;
+
+  Future<void> _pickDay() async {
+    final today = _today;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _effectiveDay,
+      firstDate: DateTime(today.year - 3),
+      // Receipts can't be from the future.
+      lastDate: today,
+      helpText: 'Day of these transactions',
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _day = DateTime(picked.year, picked.month, picked.day));
+  }
 
   Future<void> _addImages() async {
     final picked = await ImagePicker().pickMultiImage();
@@ -85,6 +117,7 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
       items: items,
       branchId: branchId,
       branchName: _branchName(branchId),
+      day: _effectiveDay,
     );
     if (!mounted) return;
 
@@ -97,8 +130,9 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Saved $saved ${saved == 1 ? 'transaction' : 'transactions'} '
-          'to ${_branchName(branchId)}',
+          'Approved $saved ${saved == 1 ? 'transaction' : 'transactions'} '
+          'for ${_branchName(branchId)} · '
+          '${formatDayRelative(_effectiveDay, today: _today)}',
         ),
       ),
     );
@@ -116,12 +150,18 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Bulk upload')),
-      body: switch (_step) {
-        _Step.pickBranch => _buildBranchStep(),
-        _Step.pickImages => _buildImagesStep(),
-        _Step.processing => _buildProcessingStep(),
-      },
+      appBar: AppBar(
+        title: Text(
+          widget.initialBranchId == null ? 'Bulk upload' : 'Add screenshots',
+        ),
+      ),
+      body: SafeArea(
+        child: switch (_step) {
+          _Step.pickBranch => _buildBranchStep(),
+          _Step.pickImages => _buildImagesStep(),
+          _Step.processing => _buildProcessingStep(),
+        },
+      ),
     );
   }
 
@@ -157,27 +197,62 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
   // ── Step 2: images ───────────────────────────────────────────────────────
 
   Widget _buildImagesStep() {
+    final theme = Theme.of(context);
     final full = _images.length >= BulkProcessor.maxImages;
+    final today = ref.watch(todayProvider);
+    final day = _effectiveDay;
+    final dayLabel = formatDayRelative(day, today: today);
+    final isToday = dayLabel == 'Today';
+
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: Row(
             children: [
               Expanded(
                 child: Text(
                   _branchName(_branchId!),
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: theme.textTheme.titleMedium,
                 ),
               ),
               Text(
                 '${_images.length}/${BulkProcessor.maxImages}',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                style: theme.textTheme.labelLarge?.copyWith(
                   color: full
-                      ? Theme.of(context).colorScheme.error
-                      : Theme.of(context).colorScheme.outline,
+                      ? theme.colorScheme.error
+                      : theme.colorScheme.outline,
                 ),
               ),
+            ],
+          ),
+        ),
+        // The day these receipts belong to (§FR-3): today unless she says
+        // otherwise. Shown as a chip so a non-today choice is impossible to
+        // miss before she approves.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Row(
+            children: [
+              ActionChip(
+                avatar: Icon(
+                  Icons.calendar_today_outlined,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
+                label: Text(isToday ? 'Today, ${formatDay(day)}' : dayLabel),
+                onPressed: _pickDay,
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: _pickDay,
+                child: Text(isToday ? 'Change day' : 'Change'),
+              ),
+              if (!isToday)
+                TextButton(
+                  onPressed: () => setState(() => _day = null),
+                  child: const Text('Today'),
+                ),
             ],
           ),
         ),
@@ -209,8 +284,8 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
                 onPressed: _images.isEmpty ? null : _start,
                 child: Text(
                   _images.length == 1
-                      ? 'Start — 1 screenshot'
-                      : 'Start — ${_images.length} screenshots',
+                      ? 'Read 1 screenshot'
+                      : 'Read ${_images.length} screenshots',
                 ),
               ),
             ),

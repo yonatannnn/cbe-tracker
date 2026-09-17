@@ -6,7 +6,6 @@ import '../../app/theme.dart';
 import '../../core/money/etb_format.dart';
 import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
-import '../reconcile/reconcile_providers.dart';
 import 'period.dart';
 
 /// Home tab — the day's position and whether it's complete (§FR-8).
@@ -34,24 +33,41 @@ class DashboardScreen extends ConsumerWidget {
         tooltip: 'Add transaction',
         child: const Icon(Icons.add),
       ),
-      body: branches.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) =>
-            Center(child: Text("Couldn't load branches: $error")),
-        data: (list) => ListView(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.sm,
-            AppSpacing.lg,
-            96,
+      body: SafeArea(
+        child: branches.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) =>
+              Center(child: Text("Couldn't load branches: $error")),
+          data: (list) => ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              96,
+            ),
+            children: [
+              const _TotalPanel(),
+              const SizedBox(height: AppSpacing.xl),
+              Row(
+                children: [
+                  const Expanded(child: _SectionLabel('BRANCHES')),
+                  TextButton.icon(
+                    onPressed: () => context.push('/branches'),
+                    icon: const Icon(Icons.tune, size: 16),
+                    label: const Text('Manage'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              _BranchList(branches: list),
+            ],
           ),
-          children: [
-            const _TotalPanel(),
-            const SizedBox(height: AppSpacing.xl),
-            const _SectionLabel('BRANCHES'),
-            const SizedBox(height: AppSpacing.sm),
-            _BranchList(branches: list),
-          ],
         ),
       ),
     );
@@ -64,8 +80,7 @@ class _SectionLabel extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) =>
-      Text(text, style: AppTextStyles.label);
+  Widget build(BuildContext context) => Text(text, style: AppTextStyles.label);
 }
 
 /// The headline: what the branches add up to over the chosen window, and
@@ -91,8 +106,9 @@ class _TotalPanel extends ConsumerWidget {
         const SizedBox(height: AppSpacing.sm),
         Text(
           amount.maybeWhen(
-            data: (cents) =>
-                period.isMovement ? formatSignedCents(cents) : formatCents(cents),
+            data: (cents) => period.isMovement
+                ? formatSignedCents(cents)
+                : formatCents(cents),
             orElse: () => '—',
           ),
           style: AppTextStyles.money.copyWith(
@@ -112,7 +128,6 @@ class _TotalPanel extends ConsumerWidget {
         const SizedBox(height: AppSpacing.lg),
         const _PeriodSelector(),
         const SizedBox(height: AppSpacing.lg),
-        const _ReconciliationStrip(),
       ],
     );
   }
@@ -142,14 +157,14 @@ class _PeriodSelector extends ConsumerWidget {
         selection.kind == PeriodKind.day || selection.kind == PeriodKind.range;
 
     Widget preset(String label, PeriodKind kind) => Padding(
-          padding: const EdgeInsets.only(right: AppSpacing.sm),
-          child: ChoiceChip(
-            label: Text(label),
-            selected: selection.kind == kind,
-            onSelected: (_) =>
-                ref.read(selectedPeriodProvider.notifier).choose(kind),
-          ),
-        );
+      padding: const EdgeInsets.only(right: AppSpacing.sm),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selection.kind == kind,
+        onSelected: (_) =>
+            ref.read(selectedPeriodProvider.notifier).choose(kind),
+      ),
+    );
 
     return SizedBox(
       height: 38,
@@ -234,99 +249,6 @@ class _PeriodSelector extends ConsumerWidget {
 /// recorded — CBE texts on every movement — so it can say whether the day is
 /// actually complete. That question ("did anything slip through?") is the
 /// reason the app exists, so it sits directly under the number it qualifies.
-class _ReconciliationStrip extends ConsumerWidget {
-  const _ReconciliationStrip();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // The green tick is an affirmative claim — "the cross-check ran and found
-    // nothing". It must never show when the check can't run (iOS, permission
-    // skipped) or hasn't answered yet (stream still loading / errored): a
-    // false all-clear here is the app lying about the one thing it exists for.
-    if (!ref.watch(smsCrossCheckActiveProvider)) {
-      return Material(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.md,
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.sms_outlined, size: 16, color: AppColors.muted),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  'SMS cross-check is off — tracking screenshots only',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.muted,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final count = ref.watch(unmatchedSmsCountProvider);
-    if (!count.hasValue) return const SizedBox.shrink();
-    final waiting = count.value ?? 0;
-    final settled = waiting == 0;
-
-    return Material(
-      color: settled ? AppColors.creditWash : AppColors.pendingWash,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        // Nothing to resolve → nothing to tap.
-        onTap: settled ? null : () => context.go('/reconcile'),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.md,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                settled ? Icons.check_circle : Icons.error_outline,
-                size: 16,
-                color: settled ? AppColors.credit : AppColors.pending,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  settled
-                      ? 'Every CBE message today has a screenshot'
-                      : waiting == 1
-                      ? '1 payment texted today has no screenshot'
-                      : '$waiting payments texted today have no screenshot',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: settled ? AppColors.credit : AppColors.pending,
-                  ),
-                ),
-              ),
-              if (!settled)
-                Icon(
-                  Icons.arrow_forward,
-                  size: 14,
-                  color: AppColors.pending,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Branches as one grouped list, not a stack of cards — they're rows in a
-/// ledger, and a shared edge lets the eye run down the balance column.
 class _BranchList extends StatelessWidget {
   const _BranchList({required this.branches});
 
@@ -408,11 +330,7 @@ class _BranchRow extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            const Icon(
-              Icons.chevron_right,
-              size: 18,
-              color: AppColors.muted,
-            ),
+            const Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
           ],
         ),
       ),

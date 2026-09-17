@@ -21,13 +21,11 @@ class BackupSummary {
   const BackupSummary({
     required this.branches,
     required this.transactions,
-    required this.smsMessages,
     required this.images,
   });
 
   final int branches;
   final int transactions;
-  final int smsMessages;
   final int images;
 }
 
@@ -46,10 +44,10 @@ class BackupService {
   final AppDatabase db;
   final ImageStore store;
 
-  static const String _dbEntry = 'cbe_tracker.sqlite';
+  static const String _dbEntry = AppDatabase.fileName;
 
-  File get _databaseFile =>
-      File('${store.documentsDir.path}/$_dbEntry');
+  /// The active user's database — the store's directory IS her directory.
+  File get _databaseFile => AppDatabase.fileIn(store.documentsDir);
 
   /// Writes a zip of the database + screenshots and returns it.
   Future<File> export() async {
@@ -121,13 +119,11 @@ class BackupService {
       final counts = await Future.wait([
         _count(incoming, 'branches'),
         _count(incoming, 'transactions'),
-        _count(incoming, 'sms_transactions'),
       ]);
       await incoming.close();
       return BackupSummary(
         branches: counts[0],
         transactions: counts[1],
-        smsMessages: counts[2],
         images: images,
       );
     } on Object {

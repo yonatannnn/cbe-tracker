@@ -13,7 +13,6 @@ import 'package:cbe_tracker/core/parser/cbe_parser.dart';
 import 'package:cbe_tracker/data/db/database.dart';
 import 'package:cbe_tracker/data/db/database_provider.dart';
 import 'package:cbe_tracker/features/add_single/add_single_screen.dart';
-import 'package:cbe_tracker/features/reconcile/reconcile_providers.dart';
 import 'package:cbe_tracker/services/parse_pipeline.dart';
 import 'package:cbe_tracker/services/service_providers.dart';
 import 'package:flutter/material.dart';
@@ -78,9 +77,6 @@ void main() {
         parsePipelineProvider.overrideWithValue(_FakePipeline(outcome)),
         activeBranchesProvider.overrideWithValue(AsyncValue.data([bole])),
         lastBranchIdProvider.overrideWithValue(const AsyncValue.data(1)),
-        smsVerifiedProvider(
-          'FT26TEST01',
-        ).overrideWithValue(const AsyncValue.data(null)),
       ],
       child: const MaterialApp(home: AddSingleScreen()),
     );

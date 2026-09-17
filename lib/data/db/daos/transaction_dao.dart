@@ -8,7 +8,7 @@ part 'transaction_dao.g.dart';
 
 /// Transactions — the ONLY source of balances (§3). All money math is integer
 /// cents in SQL; there is no double arithmetic anywhere here.
-@DriftAccessor(tables: [Transactions, Branches, SmsTransactions])
+@DriftAccessor(tables: [Transactions, Branches])
 class TransactionDao extends DatabaseAccessor<AppDatabase>
     with _$TransactionDaoMixin {
   TransactionDao(super.db);
@@ -30,27 +30,6 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
             ..where((t) => t.reference.equals(reference))
             ..limit(1))
           .getSingleOrNull();
-
-  /// Reconciliation fallback candidates (§FR-5): same amount, same type, and
-  /// the same LOCAL calendar day. [dayStart]/[dayEnd] bracket that day.
-  ///
-  /// Returning a list rather than a single row is deliberate — the caller must
-  /// see when there are several, because an ambiguous match stays unmatched.
-  Future<List<Transaction>> findCandidates({
-    required int amountCents,
-    required TxType type,
-    required DateTime dayStart,
-    required DateTime dayEnd,
-  }) {
-    return (select(transactions)..where(
-          (t) =>
-              t.amountCents.equals(amountCents) &
-              t.type.equalsValue(type) &
-              t.transactionDate.isBiggerOrEqualValue(dayStart) &
-              t.transactionDate.isSmallerThanValue(dayEnd),
-        ))
-        .get();
-  }
 
   /// Commits every row in ONE transaction. Any failure — including an
   /// unexpected duplicate reference — rolls back the WHOLE batch.
@@ -189,6 +168,28 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
     ).map((row) => row.read<int>('delta')).watchSingle();
   }
 
+  /// Live ledger rows within [start, end) across NON-archived branches —
+  /// date, amount and type only, for the Reports bar chart to bucket by day.
+  Stream<List<LedgerEntry>> watchLedgerInRange(DateTime start, DateTime end) {
+    return customSelect(
+      'SELECT t.transaction_date AS d, t.amount_cents AS a, t.type AS ty '
+      'FROM transactions t JOIN branches b ON b.id = t.branch_id '
+      'WHERE b.archived = 0 AND t.transaction_date >= ?1 '
+      'AND t.transaction_date < ?2',
+      variables: [Variable<DateTime>(start), Variable<DateTime>(end)],
+      readsFrom: {transactions, branches},
+    ).watch().map(
+      (rows) => [
+        for (final row in rows)
+          LedgerEntry(
+            date: row.read<DateTime>('d'),
+            amountCents: row.read<int>('a'),
+            type: TxType.values.byName(row.read<String>('ty')),
+          ),
+      ],
+    );
+  }
+
   /// Live credits − debits within [start, end) for one branch.
   Stream<int> watchBranchDeltaCentsInRange(
     int branchId,
@@ -240,60 +241,29 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
-  /// One transaction with its corroborating SMS, if any.
-  Future<TransactionWithSms?> findWithSms(int id) async {
-    final rows = await _joinedWithSms(
-      (t) => t.id.equals(id),
-    ).get();
-    return rows.isEmpty ? null : _mapJoined(rows.first);
-  }
+  /// One transaction by id, for the detail screen.
+  Future<Transaction?> findById(int id) =>
+      (select(transactions)..where((t) => t.id.equals(id))).getSingleOrNull();
 
-  /// A branch's transactions, newest first, each with its SMS link (§FR-7).
-  ///
-  /// ONE query with a LEFT JOIN — the verification icon must not cost a lookup
-  /// per row.
-  Stream<List<TransactionWithSms>> watchBranchTransactionsWithSms(
-    int branchId,
-  ) {
-    return _joinedWithSms(
-      (t) => t.branchId.equals(branchId),
-    ).watch().map((rows) => rows.map(_mapJoined).toList(growable: false));
-  }
-
-  JoinedSelectStatement<HasResultSet, dynamic> _joinedWithSms(
-    Expression<bool> Function($TransactionsTable t) filter,
-  ) {
-    return (select(transactions)..where(filter)).join([
-        leftOuterJoin(
-          smsTransactions,
-          smsTransactions.matchedTransactionId.equalsExp(transactions.id),
-        ),
-      ])
-      ..orderBy([
-        OrderingTerm.desc(transactions.transactionDate),
-        OrderingTerm.desc(transactions.id),
-      ]);
-  }
-
-  TransactionWithSms _mapJoined(TypedResult row) => TransactionWithSms(
-    transaction: row.readTable(transactions),
-    sms: row.readTableOrNull(smsTransactions),
-  );
-
-  /// A branch's transactions for one local day, each with its SMS link —
-  /// the report's per-branch list and verification counts (§FR-6).
-  Future<List<TransactionWithSms>> transactionsForBranchDay({
+  /// A branch's transactions for one local day, newest first — the report's
+  /// per-branch list (§FR-6).
+  Future<List<Transaction>> transactionsForBranchDay({
     required int branchId,
     required DateTime dayStart,
     required DateTime dayEnd,
-  }) async {
-    final rows = await _joinedWithSms(
-      (t) =>
-          t.branchId.equals(branchId) &
-          t.transactionDate.isBiggerOrEqualValue(dayStart) &
-          t.transactionDate.isSmallerThanValue(dayEnd),
-    ).get();
-    return rows.map(_mapJoined).toList(growable: false);
+  }) {
+    return (select(transactions)
+          ..where(
+            (t) =>
+                t.branchId.equals(branchId) &
+                t.transactionDate.isBiggerOrEqualValue(dayStart) &
+                t.transactionDate.isSmallerThanValue(dayEnd),
+          )
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.transactionDate),
+            (t) => OrderingTerm.desc(t.id),
+          ]))
+        .get();
   }
 
   /// Applies an edit (amount / type / reference / branch). Balance streams
@@ -302,19 +272,6 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
       (update(transactions)..where((t) => t.id.equals(id))).write(changes);
 
   /// Deletes a transaction; balance streams recompute automatically (§FR-7).
-  ///
-  /// Any SMS linked to it is unlinked first, which does two jobs: the message
-  /// returns to the unmatched list so the payment isn't quietly forgotten
-  /// (§FR-5), and — since `matchedTransactionId` is a FK with no ON DELETE —
-  /// the delete would otherwise be REJECTED outright by the foreign key.
-  Future<int> deleteTransaction(int id) {
-    return transaction(() async {
-      await (update(smsTransactions)
-            ..where((s) => s.matchedTransactionId.equals(id)))
-          .write(const SmsTransactionsCompanion(
-            matchedTransactionId: Value<int?>(null),
-          ));
-      return (delete(transactions)..where((t) => t.id.equals(id))).go();
-    });
-  }
+  Future<int> deleteTransaction(int id) =>
+      (delete(transactions)..where((t) => t.id.equals(id))).go();
 }

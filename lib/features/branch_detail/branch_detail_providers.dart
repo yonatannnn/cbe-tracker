@@ -12,12 +12,12 @@ import '../../data/db/database_provider.dart';
 // would re-run its query on every write to the watched tables. The screens
 // re-create them on entry anyway.
 
-/// A branch's transactions, newest first, each with its SMS link.
+/// A branch's transactions, newest first.
 final branchTransactionsProvider = StreamProvider.autoDispose
-    .family<List<TransactionWithSms>, int>(
+    .family<List<Transaction>, int>(
       (ref, branchId) => ref
           .watch(transactionDaoProvider)
-          .watchBranchTransactionsWithSms(branchId),
+          .watchTransactionsForBranch(branchId),
     );
 
 /// Today's in/out for the summary card.
@@ -44,14 +44,14 @@ final branchByIdProvider = Provider.autoDispose.family<Branch?, int>((
   return null;
 });
 
-/// One transaction with its SMS link, for the detail screen.
+/// One transaction, for the detail screen.
 final transactionByIdProvider = FutureProvider.autoDispose
-    .family<TransactionWithSms?, int>((ref, id) {
+    .family<Transaction?, int>((ref, id) {
       // Re-reads after an edit so the detail screen never shows stale fields.
       // autoDispose matters doubly here: id-space is unbounded, and every
       // retained instance re-ran this fetch on every bump().
       ref.watch(transactionRevisionProvider);
-      return ref.watch(transactionDaoProvider).findWithSms(id);
+      return ref.watch(transactionDaoProvider).findById(id);
     });
 
 /// Bumped after an edit to force [transactionByIdProvider] to re-read.

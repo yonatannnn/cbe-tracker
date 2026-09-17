@@ -44,7 +44,9 @@ class BranchChips extends ConsumerWidget {
       );
     }
     if (async.hasError && !async.hasValue) {
-      return const Text("Couldn't load branches. Close and reopen this screen.");
+      return const Text(
+        "Couldn't load branches. Close and reopen this screen.",
+      );
     }
     final branches = async.value ?? const <Branch>[];
 

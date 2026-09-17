@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/db/database_provider.dart';
+import '../../data/profiles/profile_provider.dart';
 
 /// Shown when there are zero branches. Branches are written straight to the
 /// database as they're added, so "first run" stays derived from the count.
@@ -36,6 +37,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget build(BuildContext context) {
     final branches = ref.watch(activeBranchesProvider);
     final added = branches.value ?? const [];
+    final name = ref.watch(activeProfileProvider)?.name;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Add your branches')),
@@ -46,6 +48,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (name != null) ...[
+                Text('Hi $name', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 4),
+              ],
               Text(
                 'Create a branch for each shop you track. You can add more later.',
                 style: Theme.of(context).textTheme.bodyMedium,

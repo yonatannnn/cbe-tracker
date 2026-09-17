@@ -3,8 +3,9 @@
 Flutter app for a business owner managing ~5 branches. All transactions flow
 through CBE (Commercial Bank of Ethiopia). She records transactions by
 uploading CBE screenshots; the app reads them via OCR, assigns them to a
-branch, maintains per-branch balances, cross-checks against CBE SMS, and
-produces end-of-day reports per branch.
+branch, maintains per-branch balances, and produces end-of-day reports per
+branch. (SMS reading and reconciliation were removed in September 2026: the
+app asks for no SMS permission and reads no messages.)
 
 **Design principle: automation first.** The user never types transaction
 data. She picks a branch, adds screenshots, and confirms. OCR fills
@@ -15,10 +16,24 @@ images.
 
 ## 1. Functional requirements
 
+### FR-0 User (whose books these are)
+- First open asks for the user's name, with a single Continue button. Nothing
+  else is reachable until a name is given.
+- The name is the key the data is filed under: each user has her OWN
+  database and screenshot folder (`profiles.json` at the documents root maps
+  name → folder; the first user keeps the root so pre-profile data survives).
+  Two users on one phone never see each other's branches, balances or images.
+- Typing an existing name (case-insensitive) signs that user back in rather
+  than creating a second set of books.
+- Settings shows who is signed in, switches between users, and adds another.
+
 ### FR-1 Branch management
 - CRUD for branches (name only; balance is derived, never typed).
 - A branch with transactions cannot be deleted — only archived.
-- App ships with an onboarding step to create initial branches.
+- After the name, onboarding creates the initial branches ("Hi <name>").
+- A full branch management PAGE (not a sheet), reached from the dashboard's
+  "Manage" link and from Settings: add, rename, remove/archive, and each
+  branch's balance; tapping a branch opens it.
 
 ### FR-2 Single screenshot transaction
 - User picks/pastes a CBE transaction screenshot.
@@ -36,9 +51,20 @@ images.
   screenshot shows "Already recorded on <date>" and blocks saving.
 - Saving a credit adds to the branch balance; a debit deducts.
 
-### FR-3 Bulk screenshot upload
-- Flow: pick ONE branch → multi-select up to 50 images → sequential OCR
-  with progress ("Processing 4 of 7…") → review modal.
+### FR-3 Bulk screenshot upload — THE MAIN FLOW
+- Entry: from inside a branch, "Add screenshots". The branch is already
+  chosen, so the flow opens on the image step. (The dashboard FAB's "Bulk
+  upload" still asks for the branch first.)
+- The batch has a DAY: defaults to today, changeable with a date picker (no
+  future dates), shown as a chip so a non-today choice is obvious. Every
+  approved row is dated on that day; the receipt's own time of day is kept
+  for ordering, and the receipt's date is NOT used.
+- Flow: (branch) → day → multi-select up to 50 images → sequential OCR with
+  progress ("Processing 4 of 7…") → approval modal.
+- The approval modal leads with the count: "5 of 7 read correctly · 1 already
+  recorded · 1 unreadable", then the branch and the day.
+- Above the button, a live sum of the CHECKED rows: IN (credits), OUT
+  (debits) and NET, in integer cents. It follows the checkboxes.
 - Review modal rows, three states:
   1. Parsed OK — checkbox (checked by default), amount + type badge +
      reference, read-only. Edit icon appears ONLY on low-confidence rows;
@@ -46,46 +72,18 @@ images.
   2. Duplicate — greyed out, locked, "Already recorded on <date/time>".
   3. Failed OCR — thumbnail + "Couldn't read this image" + "Add manually"
      button.
-- Primary button states the exact count: "Save 5 transactions".
+- Primary button states the exact count: "Approve 5 transactions".
 - All checked rows commit in ONE database transaction (atomic — a crash
   mid-save must never leave half-applied balances).
 
-### FR-4 SMS reading & shadow ledger (Android only)
-- Read CBE inbox SMS (sender address "CBE") on first run + listen for new
-  incoming SMS in foreground and background.
-- Parse SMS bodies with the SAME extraction logic as OCR (shared parser).
-- Store in a separate `sms_transactions` table (shadow ledger). SMS never
-  affects balances — screenshots are the source of truth for balances,
-  SMS is the audit trail.
-- iOS: feature silently disabled; Reconcile tab shows an empty state
-  ("SMS sync is available on Android"). App remains fully functional via
-  screenshots.
-- First-run permission explainer screen before the system SMS permission
-  dialog, with a "Skip — screenshots only" option.
-
-### FR-5 Reconciliation ("in SMS but not in screenshots")
-- Matching runs automatically whenever a screenshot transaction is saved
-  or a new SMS arrives:
-  1. Primary match: exact FT reference.
-  2. Fallback: same amount + same type + same calendar day (covers OCR
-     misreads of the reference). If the fallback matches MULTIPLE
-     candidates, leave unmatched for manual resolution.
-- Reconcile tab (daily view, date picker defaults to today):
-  - Summary cards: SMS received count, matched count.
-  - List of unmatched SMS with amount, type badge, time, SMS snippet.
-  - Per row actions:
-    - "Add to branch" → bottom sheet branch picker → creates a real
-      transaction from the SMS data, marks matched.
-    - "Ignore (personal)" → sets `ignored = true`, disappears from the
-      list permanently. Confirmation sheet + undo snackbar.
-  - Collapsed "Ignored today (n)" section at the bottom with undo.
+### FR-4 / FR-5 — removed
+SMS reading, the shadow ledger and the Reconcile tab were removed. The app
+requests no SMS permission. Screenshots are the only source of transactions.
 
 ### FR-6 Daily reports
 - Reports tab: date picker (default today) → per-branch summary cards:
   opening balance, total credited, total debited, closing balance,
   transaction count, verification badge ("12/12 verified" = matched
-  against SMS; amber when partial).
-- Footer line: "n SMS marked personal · n unresolved".
 - Export: PDF per branch AND a combined PDF, shareable via share sheet
   (Telegram/WhatsApp). PDF mirrors the on-screen cards + full transaction
   list per branch.

@@ -8,11 +8,11 @@ part 'settings_dao.g.dart';
 /// Small key-value settings store. Currently only remembers the most recently
 /// used branch so the add flow can pre-select it (§FR-2).
 @DriftAccessor(tables: [AppSettings])
-class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin {
+class SettingsDao extends DatabaseAccessor<AppDatabase>
+    with _$SettingsDaoMixin {
   SettingsDao(super.db);
 
   static const _lastBranchKey = 'last_branch_id';
-  static const _smsStateKey = 'sms_permission_state';
   static const _reminderKey = 'report_reminder_time';
   static const _reminderLastKey = 'report_reminder_time_last';
   static const _cloudBackupKey = 'cloud_last_backup';
@@ -44,27 +44,6 @@ class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin 
         .watchSingleOrNull()
         .map((row) => row == null ? null : int.tryParse(row.value));
   }
-
-  /// Where the user got to with the SMS permission (§FR-4).
-  ///
-  /// Deliberately tri-state. A plain "skipped" bool can't tell "never asked"
-  /// from "granted"; and inferring it from whether any SMS exist is wrong too,
-  /// because a first sync pulls HISTORICAL messages — today's count can be 0
-  /// with permission granted, stranding the user on the explainer forever.
-  Stream<SmsPermissionState> watchSmsPermissionState() {
-    return (select(appSettings)..where((s) => s.key.equals(_smsStateKey)))
-        .watchSingleOrNull()
-        .map(
-          (row) => switch (row?.value) {
-            'granted' => SmsPermissionState.granted,
-            'skipped' => SmsPermissionState.skipped,
-            _ => SmsPermissionState.unasked,
-          },
-        );
-  }
-
-  Future<void> setSmsPermissionState(SmsPermissionState state) =>
-      _set(_smsStateKey, state.name);
 
   /// The daily report reminder, as "HH:mm". Null = off.
   ///
@@ -107,6 +86,3 @@ class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin 
   Future<void> setLastCloudBackup(DateTime when) =>
       _set(_cloudBackupKey, when.toIso8601String());
 }
-
-/// Tri-state so "never asked" is distinguishable from granted/skipped.
-enum SmsPermissionState { unasked, granted, skipped }

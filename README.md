@@ -1,10 +1,9 @@
 # CBE Tracker
 
-Per-branch balances from CBE receipt screenshots, cross-checked against CBE
-SMS. Built for a business owner running ~5 branches whose money moves through
-the Commercial Bank of Ethiopia: photograph the receipt, the app reads it,
-files it under a branch, checks it against the bank's own SMS, and produces
-end-of-day PDF reports.
+Per-branch balances from CBE receipt screenshots. Built for a business owner
+running ~5 branches whose money moves through the Commercial Bank of Ethiopia:
+photograph the receipt, the app reads it, files it under a branch, and produces
+end-of-day PDF reports. It reads no SMS and asks for no SMS permission.
 
 Money is integer cents everywhere. The CBE parser is pure Dart. The source of
 truth for behaviour is `REQUIREMENTS.md`.
@@ -50,11 +49,11 @@ flutter build apk --release \
 ## Layout
 
 ```
-lib/core/parser/     CBE receipt + SMS parser (pure Dart, no Flutter imports)
+lib/core/parser/     CBE receipt parser (pure Dart, no Flutter imports)
 lib/core/money/      integer-cents formatting
 lib/data/db/         Drift schema, DAOs, providers
 lib/services/        OCR, parse pipeline, bulk processor, backup (local+cloud),
-                     PDF, notifications, SMS ingestion
+                     PDF, notifications
 lib/features/        one folder per screen/flow
 docs/                Supabase setup, manual test script
 ```

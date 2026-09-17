@@ -98,7 +98,7 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => _SignInSheet(),
+      builder: (sheetContext) => SafeArea(child: _SignInSheet()),
     );
     if (credentials == null || !mounted) return;
 
@@ -197,7 +197,9 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
 
   void _say(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -213,7 +215,9 @@ class _LastBackupLine extends StatelessWidget {
       future: service.lastBackupAt(),
       builder: (context, snapshot) {
         final when = snapshot.data;
-        return Text(when == null ? 'No backup yet' : 'Last backup ${_ago(when)}');
+        return Text(
+          when == null ? 'No backup yet' : 'Last backup ${_ago(when)}',
+        );
       },
     );
   }
@@ -272,7 +276,10 @@ class _SignInSheetState extends State<_SignInSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Cloud backup', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Cloud backup',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(
               controller: _email,

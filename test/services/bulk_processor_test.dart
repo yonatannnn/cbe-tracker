@@ -206,4 +206,26 @@ void main() {
   test('empty input emits nothing', () async {
     expect(await processorFor({}).process([]).toList(), isEmpty);
   });
+
+  test('the same reference twice in one batch → the later one is a duplicate '
+      'of the earlier, not saved and not blamed on the database', () async {
+    final script = <String, ParseOutcome>{
+      'a.png': ParseSuccess(parsed(reference: 'FT26196FZHT2', cents: 100)),
+      'b.png': ParseSuccess(parsed(reference: 'FT26196KZKRR', cents: 200)),
+      'c.png': ParseSuccess(parsed(reference: 'FT26196FZHT2', cents: 100)),
+      'd.png': ParseSuccess(parsed(reference: 'FT26196FZHT2', cents: 100)),
+    };
+    final images = [for (final n in ['a', 'b', 'c', 'd']) File('$n.png')];
+
+    final progress = await processorFor(script).process(images).toList();
+    final items = progress.last.resultsSoFar;
+
+    expect(items[0].status, BulkStatus.ok);
+    expect(items[1].status, BulkStatus.ok);
+    expect(items[2].status, BulkStatus.duplicate);
+    expect(items[2].duplicateOf, 1, reason: 'points at the FIRST copy');
+    expect(items[2].existing, isNull, reason: 'nothing in the database');
+    expect(items[3].status, BulkStatus.duplicate);
+    expect(items[3].duplicateOf, 1);
+  });
 }

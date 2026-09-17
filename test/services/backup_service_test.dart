@@ -76,15 +76,6 @@ void main() {
         transactionDate: DateTime(2026, 7, 14, 15, 0),
       ),
     );
-    await db.smsDao.insertIfNew(
-      SmsTransactionsCompanion.insert(
-        amountCents: 500000,
-        smsBody: 'CBE: you have received ETB 5,000.00',
-        receivedAt: DateTime(2026, 7, 14, 10, 41),
-        type: const Value(TxType.credit),
-        reference: const Value('FT26195XKQ8T'),
-      ),
-    );
     // A real evidence image on disk.
     final dir = Directory('${docs.path}/${ImageStore.subdirectory}');
     await dir.create(recursive: true);
@@ -119,7 +110,6 @@ void main() {
       expect(await restored.transactionDao.watchBalanceCents(1).first, 380000);
       expect((await restored.select(restored.branches).get()).length, 2);
       expect((await restored.select(restored.transactions).get()).length, 2);
-      expect((await restored.select(restored.smsTransactions).get()).length, 1);
       await restored.close();
 
       // The evidence image came back byte-for-byte.
@@ -139,7 +129,6 @@ void main() {
       final summary = await backup.inspect(zip);
       expect(summary.branches, 2);
       expect(summary.transactions, 2);
-      expect(summary.smsMessages, 1);
       expect(summary.images, 1);
 
       // Nothing was touched.

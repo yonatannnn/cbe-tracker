@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../data/db/daos/settings_dao.dart';
 import '../data/db/database_provider.dart';
-import '../features/reconcile/reconcile_providers.dart';
 import '../features/reports/reports_providers.dart';
 import '../services/image_migration.dart';
 import '../services/notification_service.dart';
@@ -37,42 +35,8 @@ class _CbeTrackerAppState extends ConsumerState<CbeTrackerApp>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _initReminder();
         _rescueScreenshots();
-        _rearmSms();
         _maybeCloudBackup();
       });
-    }
-  }
-
-  /// Re-arms SMS ingestion on every launch (§FR-4).
-  ///
-  /// startListening() was previously called exactly once, at the moment
-  /// permission was granted. If the OS ever dropped the background receiver —
-  /// app update, battery optimisation, force stop — nothing re-registered it,
-  /// and the shadow ledger silently stopped filling while the dashboard kept
-  /// claiming every message was accounted for. syncInbox() then catches up
-  /// whatever arrived while nothing was listening; its unique index makes the
-  /// re-read safe to repeat.
-  Future<void> _rearmSms() async {
-    try {
-      final state = await ref
-          .read(settingsDaoProvider)
-          .watchSmsPermissionState()
-          .first;
-      if (state != SmsPermissionState.granted) return;
-      final sms = ref.read(smsServiceProvider);
-      if (!sms.isSupported) return;
-      await sms.startListening();
-      await sms.syncInbox();
-    } on Object {
-      // Best-effort: the Reconcile tab's manual refresh reports failures.
-    }
-  }
-
-  Future<void> _reconcileQuietly() async {
-    try {
-      await ref.read(reconcileServiceProvider).reconcile();
-    } on Object {
-      // The next sweep (save, sync, resume) retries; resuming must never crash.
     }
   }
 
@@ -136,13 +100,9 @@ class _CbeTrackerAppState extends ConsumerState<CbeTrackerApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // SMS may have arrived in the background while we were away (§FR-5).
-      // Guarded: this ran unawaited on the app's hottest path, so a throw was
-      // an unhandled async error.
-      _reconcileQuietly();
       // A phone asleep past midnight won't have fired the rollover timer, so
-      // catch the day up on resume — otherwise the dashboard's "today" and the
-      // reconcile banner stay stuck on yesterday until a restart.
+      // catch the day up on resume — otherwise the dashboard's "today" stays
+      // stuck on yesterday until a restart.
       ref.read(todayProvider.notifier).refresh();
       // Resuming often means connectivity is back — a good moment to catch up
       // the daily cloud backup (Phase 10).
