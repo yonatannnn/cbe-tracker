@@ -123,7 +123,11 @@ void main() {
       expect(p.date, DateTime(2026, 9, 17, 16, 37, 36));
       expect(p.confidence, Confidence.high);
       expect(p.bank, 'telebirr');
-      expect(p.counterparty, 'Mrs Sosina Tilahun Getachew');
+      expect(
+        p.counterparty,
+        isNull,
+        reason: 'the receipt names her, not the payer',
+      );
     });
 
     test('to some other bank → LOW', () {
@@ -281,7 +285,7 @@ void main() {
       expect(p.reference, 'DIH7T421XV');
       expect(p.date, DateTime(2026, 9, 17, 16, 37, 36));
       expect(p.confidence, Confidence.high);
-      expect(p.counterparty, 'Mrs Sosina Tilahun Getachew');
+      expect(p.counterparty, isNull);
     });
 
     test('Bank of Abyssinia, values after labels, lower-case OCR in the ref', () {

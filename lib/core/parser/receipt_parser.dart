@@ -276,21 +276,6 @@ final _telebirrAppTimeRe = RegExp(
   r'\b(\d{4}/\d{2}/\d{2}\s+\d{1,2}:\d{2}(?::\d{2})?)\b',
 );
 final _telebirrAppAmountRe = RegExp(r'[-−–]?\s*([\d,]+[.,]\d{2})\s*\(?\s*ETB');
-final _telebirrAppToLabelRe = RegExp(
-  r'Transaction To:?\s+(.+?)\s+Bank Account',
-  caseSensitive: false,
-);
-final _telebirrAppToShapeRe = RegExp(
-  r'Transfer To Bank\s+([A-Za-z][A-Za-z .]{2,60}?)\s+\d{8,}',
-  caseSensitive: false,
-);
-
-String? _telebirrReceiver(String text) =>
-    (_telebirrAppToLabelRe.firstMatch(text) ??
-            _telebirrAppToShapeRe.firstMatch(text))
-        ?.group(1)
-        .let(_clean);
-
 ParsedCbeMessage? _telebirrAppReceipt(String text, String? suffix) {
   if (!_telebirrAppMarkerRe.hasMatch(text)) return null;
   final time = _telebirrAppTimeRe.firstMatch(text);
@@ -313,7 +298,8 @@ ParsedCbeMessage? _telebirrAppReceipt(String text, String? suffix) {
         : Confidence.low,
     rawText: text,
     bank: 'telebirr',
-    counterparty: _telebirrReceiver(text),
+    // The receipt names the receiver (her), never the payer.
+    counterparty: null,
   );
 }
 
