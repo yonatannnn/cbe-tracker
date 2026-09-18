@@ -53,7 +53,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 const SizedBox(height: 4),
               ],
               Text(
-                'Create a branch for each shop you track. You can add more later.',
+                'Create a branch for each place customers pay into. You can '
+                'add more later.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 16),

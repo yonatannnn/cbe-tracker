@@ -266,9 +266,10 @@ class GeminiFallbackService implements CbeAiFallback {
         : 'You are given OCR text from a bank receipt.';
     return '''
 You extract a single bank transaction for the user's books. $source
-The user banks with the Commercial Bank of Ethiopia (CBE). Receipts may come
-from CBE or from another Ethiopian bank or wallet (Awash, Dashen, Abyssinia,
-Telebirr, …) when a customer paid the user.
+The user is an accountant. Customers pay into her Commercial Bank of Ethiopia
+(CBE) accounts, one per branch, and send her the screenshot of their payment.
+Receipts may come from CBE or from any other Ethiopian bank or wallet (Awash,
+Dashen, Abyssinia, Telebirr, …).
 
 Rules:
 - CBE wording: "credited", "received", "deposited" => type "credit";
@@ -395,6 +396,9 @@ $rawText
     final counterparty = _stringOrNull(
       type == TxType.credit ? json['sender'] : json['beneficiary'],
     );
+    final recipient = type == TxType.credit
+        ? _stringOrNull(json['beneficiary'])
+        : null;
 
     // A CBE receipt is recognised by its wording, not by what the model says
     // the bank is — the model could call anything "Awash" to skip the gates.
@@ -412,6 +416,7 @@ $rawText
         bank: bank ?? 'CBE',
         date: date,
         counterparty: counterparty,
+        recipient: recipient,
       );
     }
 
@@ -448,6 +453,7 @@ $rawText
       rawText: rawText,
       bank: bank,
       counterparty: counterparty,
+      recipient: recipient,
     );
   }
 
@@ -460,6 +466,7 @@ $rawText
     required String bank,
     required DateTime? date,
     required String? counterparty,
+    required String? recipient,
   }) {
     // GATE 1 — amount-adjacency, computed entirely locally (we never ask the
     // model where it found the figure; it could just as easily lie about that).
@@ -506,6 +513,7 @@ $rawText
       rawText: rawText,
       bank: bank,
       counterparty: counterparty,
+      recipient: recipient,
     );
   }
 

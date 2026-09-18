@@ -584,13 +584,18 @@ class _ReviewRowTile extends StatelessWidget {
     );
   }
 
-  /// "Awash Bank · from ESRAEL TOLOSA TOLA" — bank and payer when known.
+  /// "Awash Bank · from ESRAEL TOLOSA TOLA" when the payer is on the
+  /// receipt; "telebirr · to Mrs Sosina …" when only the receiving side is.
   static String? _origin(ParsedCbeMessage? parsed) {
     if (parsed == null) return null;
     final who = parsed.counterparty;
+    final to = parsed.recipient;
     final parts = <String>[
       ?parsed.bank,
-      if (who != null) '${parsed.type == TxType.credit ? 'from' : 'to'} $who',
+      if (who != null)
+        '${parsed.type == TxType.credit ? 'from' : 'to'} $who'
+      else if (to != null)
+        'to $to',
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }

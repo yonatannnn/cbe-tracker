@@ -87,8 +87,9 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
               Text('Welcome', style: theme.textTheme.headlineMedium),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                "What's your name? Your branches and transactions are kept "
-                'under it, separate from anyone else using this phone.',
+                "What's your name? The receipts you file, your branches and "
+                'their totals are kept under it, separate from anyone else '
+                'using this phone.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.outline,
                 ),

@@ -276,6 +276,21 @@ final _telebirrAppTimeRe = RegExp(
   r'\b(\d{4}/\d{2}/\d{2}\s+\d{1,2}:\d{2}(?::\d{2})?)\b',
 );
 final _telebirrAppAmountRe = RegExp(r'[-−–]?\s*([\d,]+[.,]\d{2})\s*\(?\s*ETB');
+final _telebirrAppToLabelRe = RegExp(
+  r'Transaction To:?\s+(.+?)\s+Bank Account',
+  caseSensitive: false,
+);
+final _telebirrAppToShapeRe = RegExp(
+  r'Transfer To Bank\s+([A-Za-z][A-Za-z .]{2,60}?)\s+\d{8,}',
+  caseSensitive: false,
+);
+
+String? _telebirrReceiver(String text) =>
+    (_telebirrAppToLabelRe.firstMatch(text) ??
+            _telebirrAppToShapeRe.firstMatch(text))
+        ?.group(1)
+        .let(_clean);
+
 ParsedCbeMessage? _telebirrAppReceipt(String text, String? suffix) {
   if (!_telebirrAppMarkerRe.hasMatch(text)) return null;
   final time = _telebirrAppTimeRe.firstMatch(text);
@@ -298,8 +313,9 @@ ParsedCbeMessage? _telebirrAppReceipt(String text, String? suffix) {
         : Confidence.low,
     rawText: text,
     bank: 'telebirr',
-    // The receipt names the receiver (her), never the payer.
+    // The receipt names the receiver, never the payer.
     counterparty: null,
+    recipient: _telebirrReceiver(text),
   );
 }
 
@@ -421,6 +437,11 @@ final _dashenDateRe = RegExp(
   r'Transaction Date\s*:?\s*([A-Za-z]{3,9}\s+\d{1,2},\s*\d{4},?\s*\d{1,2}:\d{2}(?::\d{2})?\s*[apAP][mM])',
 );
 
+final _dashenReceiverRe = RegExp(
+  r'Receiver Name\s*:?\s*(.+?)\s*Receiver Account',
+  caseSensitive: false,
+);
+
 ParsedCbeMessage? _dashenReceipt(String text, String? suffix) {
   final ref = _dashenRefRe.firstMatch(text);
   final amount = _dashenAmountRe.firstMatch(text);
@@ -436,8 +457,9 @@ ParsedCbeMessage? _dashenReceipt(String text, String? suffix) {
     confidence: date != null ? Confidence.high : Confidence.low,
     rawText: text,
     bank: 'Dashen Bank',
-    // Dashen's receipt names the receiver (her), not the payer.
+    // Dashen's receipt names the receiver, not the payer.
     counterparty: null,
+    recipient: _dashenReceiverRe.firstMatch(text)?.group(1).let(_clean),
   );
 }
 

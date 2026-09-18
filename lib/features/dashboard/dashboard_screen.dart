@@ -351,7 +351,7 @@ Future<void> _showAddMethodSheet(BuildContext context) {
           ListTile(
             leading: const Icon(Icons.photo_camera_outlined),
             title: const Text('Single screenshot'),
-            subtitle: const Text('Read one CBE receipt'),
+            subtitle: const Text('Read one receipt a customer sent'),
             onTap: () {
               Navigator.pop(sheetContext);
               context.push('/add-single');
@@ -360,7 +360,7 @@ Future<void> _showAddMethodSheet(BuildContext context) {
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
             title: const Text('Bulk upload'),
-            subtitle: const Text('Up to 50 at once'),
+            subtitle: const Text("A day's receipts, up to 50 at once"),
             onTap: () {
               Navigator.pop(sheetContext);
               context.push('/add-bulk');

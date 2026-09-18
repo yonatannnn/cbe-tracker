@@ -286,6 +286,7 @@ void main() {
       expect(p.date, DateTime(2026, 9, 17, 16, 37, 36));
       expect(p.confidence, Confidence.high);
       expect(p.counterparty, isNull);
+      expect(p.recipient, 'Mrs Sosina Tilahun Getachew');
     });
 
     test('Bank of Abyssinia, values after labels, lower-case OCR in the ref', () {

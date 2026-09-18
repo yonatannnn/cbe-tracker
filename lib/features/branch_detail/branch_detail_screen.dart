@@ -426,8 +426,8 @@ class _EmptyState extends ConsumerWidget {
             Text('No transactions yet', style: theme.textTheme.titleMedium),
             const SizedBox(height: 6),
             Text(
-              "Tap Add screenshots, drop the day's CBE receipts, and approve "
-              'what was read.',
+              'Tap Add screenshots, drop the payment screenshots customers '
+              'sent for this branch, and approve what was read.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.outline,

@@ -25,6 +25,7 @@ class ParsedCbeMessage {
     required this.rawText,
     this.bank,
     this.counterparty,
+    this.recipient,
   });
 
   /// Money is integer cents everywhere — never double arithmetic (CLAUDE.md).
@@ -47,6 +48,10 @@ class ParsedCbeMessage {
 
   /// Who the money came from (credit) or went to (debit), when read.
   final String? counterparty;
+
+  /// Who the money went TO, when the receipt names only the receiving side
+  /// (a customer's telebirr "Transfer To Bank" screen, a Dashen receipt).
+  final String? recipient;
 }
 
 /// Thrown when the text cannot be parsed with confidence — specifically when

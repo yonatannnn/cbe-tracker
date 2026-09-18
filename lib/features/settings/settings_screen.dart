@@ -69,7 +69,8 @@ class SettingsScreen extends ConsumerWidget {
                 ownerSuffix == null
                     ? 'Not set — receipts that show both sides of a transfer '
                           'come back for review'
-                    : 'Receipts to …$ownerSuffix are money in, from it money out',
+                    : 'Payments into …$ownerSuffix count as money in, transfers '
+                          'out of it as money out',
               ),
               trailing: Text(
                 ownerSuffix == null ? '—' : '…$ownerSuffix',

@@ -1,11 +1,14 @@
 # CBE Branch Expense Tracker — Requirements & Build Plan
 
-Flutter app for a business owner managing ~5 branches. All transactions flow
-through CBE (Commercial Bank of Ethiopia). She records transactions by
-uploading CBE screenshots; the app reads them via OCR, assigns them to a
-branch, maintains per-branch balances, and produces end-of-day reports per
-branch. (SMS reading and reconciliation were removed in September 2026: the
-app asks for no SMS permission and reads no messages.)
+Flutter app for an accountant who keeps the books for ~5 branches. Customers
+pay into each branch's CBE (Commercial Bank of Ethiopia) account — from CBE,
+telebirr, Awash, Abyssinia, Dashen or any other bank — and send her the
+screenshot of their payment. She was summing those screenshots by hand, per
+branch, every day. The app does that: she drops the day's screenshots into a
+branch, the app reads each one, catches repeats, shows the total, and files
+them once she approves; per-branch balances and end-of-day reports follow.
+(SMS reading and reconciliation were removed in September 2026: the app asks
+for no SMS permission and reads no messages.)
 
 **Design principle: automation first.** The user never types transaction
 data. She picks a branch, adds screenshots, and confirms. OCR fills

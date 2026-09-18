@@ -1,9 +1,12 @@
 # CBE Tracker
 
-Per-branch balances from CBE receipt screenshots. Built for a business owner
-running ~5 branches whose money moves through the Commercial Bank of Ethiopia:
-photograph the receipt, the app reads it, files it under a branch, and produces
-end-of-day PDF reports. It reads no SMS and asks for no SMS permission.
+Per-branch totals from the payment screenshots customers send. Built for an
+accountant keeping the books for ~5 branches: customers pay into a branch's
+Commercial Bank of Ethiopia account, from CBE or any other bank or wallet, and
+send her the screenshot. She drops the day's screenshots into the branch; the
+app reads each one, catches repeats, shows the sum, files them on approval, and
+produces end-of-day PDF reports. It reads no SMS and asks for no SMS
+permission.
 
 Money is integer cents everywhere. The CBE parser is pure Dart. The source of
 truth for behaviour is `REQUIREMENTS.md`.
