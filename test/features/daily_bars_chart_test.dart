@@ -58,9 +58,7 @@ void main() {
   ) async {
     await pump(tester, selected: today);
 
-    expect(find.text('LAST 7 DAYS'), findsOneWidget);
-    expect(find.text('In'), findsOneWidget);
-    expect(find.text('Out'), findsOneWidget);
+    expect(find.text('RECEIVED · LAST 7 DAYS'), findsOneWidget);
     for (final n in ['11', '12', '13', '14', '15', '16', '17']) {
       expect(find.text(n), findsOneWidget);
     }
@@ -70,15 +68,13 @@ void main() {
   testWidgets('the caption says the selected day in words', (tester) async {
     await pump(tester, selected: DateTime(2026, 9, 15));
     expect(
-      find.text(
-        '15 Sep 2026 · In ETB 12,500.00 · Out ETB 3,000.00 · 2 transactions',
-      ),
+      find.text('15 Sep 2026 · ETB 12,500.00 received · 2 transactions'),
       findsOneWidget,
     );
 
     await pump(tester, selected: today);
     expect(
-      find.text('Today · In ETB 0.00 · Out ETB 1.00 · 1 transaction'),
+      find.text('Today · ETB 0.00 received · 1 transaction'),
       findsOneWidget,
     );
 

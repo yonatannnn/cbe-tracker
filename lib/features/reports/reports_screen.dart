@@ -311,14 +311,9 @@ class _BranchCardState extends State<_BranchCard> {
               const SizedBox(height: 12),
               _Figure(label: 'Opening', cents: summary.openingCents),
               _Figure(
-                label: 'Credited',
+                label: 'Received',
                 cents: summary.creditedCents,
                 color: AppColors.credit,
-              ),
-              _Figure(
-                label: 'Debited',
-                cents: summary.debitedCents,
-                color: theme.colorScheme.error,
               ),
               const Divider(height: 18),
               _Figure(

@@ -16,7 +16,6 @@ class ReviewRow {
     required this.item,
     required this.checked,
     this.editedCents,
-    this.editedType,
     this.editedReference,
     this.expanded = false,
   });
@@ -26,7 +25,6 @@ class ReviewRow {
 
   /// Manual overrides. Null means "use whatever was parsed".
   final int? editedCents;
-  final TxType? editedType;
   final String? editedReference;
 
   /// Whether the inline edit form is showing.
@@ -39,7 +37,9 @@ class ReviewRow {
 
   int? get effectiveCents => editedCents ?? item.parsed?.amountCents;
 
-  TxType? get effectiveType => editedType ?? item.parsed?.type;
+  /// Every receipt she files is a customer paying in (§FR-0 story), so every
+  /// row is a credit — whatever wording the receipt used.
+  TxType get effectiveType => TxType.credit;
 
   /// The reference to save with. Falls back to `MANUAL-<uuid>` when neither
   /// the parse nor the user supplied one (§FR-2 keeps references UNIQUE).
@@ -51,12 +51,12 @@ class ReviewRow {
     return manualReference();
   }
 
-  /// A row may be checked once it has an amount and a type, and isn't a
-  /// duplicate. This is what turns a filled-in failed row into a saveable one.
+  /// A row may be checked once it has an amount and isn't a duplicate. This
+  /// is what turns a filled-in failed row into a saveable one.
   bool get isCheckable {
     if (isDuplicate) return false;
     final cents = effectiveCents;
-    return cents != null && cents > 0 && effectiveType != null;
+    return cents != null && cents > 0;
   }
 
   /// Only AI-parsed and failed rows are editable. A clean local parse is shown
@@ -64,17 +64,11 @@ class ReviewRow {
   bool get isEditable =>
       status == BulkStatus.okAiParsed || status == BulkStatus.failed;
 
-  ReviewRow copyWith({
-    bool? checked,
-    TxType? editedType,
-    String? editedReference,
-    bool? expanded,
-  }) {
+  ReviewRow copyWith({bool? checked, String? editedReference, bool? expanded}) {
     return ReviewRow(
       item: item,
       checked: checked ?? this.checked,
       editedCents: editedCents,
-      editedType: editedType ?? this.editedType,
       editedReference: editedReference ?? this.editedReference,
       expanded: expanded ?? this.expanded,
     );
@@ -85,7 +79,6 @@ class ReviewRow {
     item: item,
     checked: checked,
     editedCents: cents,
-    editedType: editedType,
     editedReference: editedReference,
     expanded: expanded,
   );
@@ -150,19 +143,12 @@ class ReviewState {
   int get failedCount =>
       rows.where((r) => r.status == BulkStatus.failed).length;
 
-  /// Sum of the checked credits, in cents. Integer arithmetic only.
-  int get creditCents => _sum(TxType.credit);
-
-  /// Sum of the checked debits, in cents.
-  int get debitCents => _sum(TxType.debit);
-
-  /// What approving does to the branch balance: credits − debits.
-  int get netCents => creditCents - debitCents;
-
-  int _sum(TxType type) {
+  /// Sum of the checked rows, in cents — what approving adds to the branch.
+  /// Integer arithmetic only.
+  int get totalCents {
     var total = 0;
     for (final row in rows) {
-      if (!row.checked || row.effectiveType != type) continue;
+      if (!row.checked) continue;
       total += row.effectiveCents ?? 0;
     }
     return total;
@@ -192,9 +178,6 @@ class ReviewState {
   /// the row checkable.
   ReviewState editAmount(int index, int? cents) =>
       _settle(index, rows[index].withAmount(cents));
-
-  ReviewState editType(int index, TxType type) =>
-      _settle(index, rows[index].copyWith(editedType: type));
 
   ReviewState editReference(int index, String reference) =>
       _settle(index, rows[index].copyWith(editedReference: reference));

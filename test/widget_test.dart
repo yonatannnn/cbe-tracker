@@ -232,20 +232,17 @@ void main() {
       expect(find.textContaining('− ETB'), findsNothing);
     });
 
-    testWidgets('positive delta renders green with a plus', (tester) async {
+    testWidgets("today's receipts read green, unsigned — money only comes in", (
+      tester,
+    ) async {
       await tester.pumpWidget(app(branches: [bole], todayDeltaCents: 500000));
       await tester.pumpAndSettle();
 
-      final text = tester.widget<Text>(find.text('+ ETB 5,000.00 today'));
+      final text = tester.widget<Text>(
+        find.text('ETB 5,000.00 received today'),
+      );
       expect(text.style?.color, AppColors.credit);
-    });
-
-    testWidgets('negative delta renders red with a minus sign', (tester) async {
-      await tester.pumpWidget(app(branches: [bole], todayDeltaCents: -500000));
-      await tester.pumpAndSettle();
-
-      final text = tester.widget<Text>(find.text('− ETB 5,000.00 today'));
-      expect(text.style?.color, AppColors.debit);
+      expect(find.textContaining('+ ETB'), findsNothing);
     });
 
     testWidgets('switching to the Reports tab shows Reports', (tester) async {
@@ -257,9 +254,7 @@ void main() {
 
       expect(find.widgetWithText(AppBar, 'Reports'), findsOneWidget);
       // The seven-day chart sits above the branch cards, with its legend.
-      expect(find.text('LAST 7 DAYS'), findsOneWidget);
-      expect(find.text('In'), findsOneWidget);
-      expect(find.text('Out'), findsOneWidget);
+      expect(find.text('RECEIVED · LAST 7 DAYS'), findsOneWidget);
       expect(find.text('No transactions in the last 7 days'), findsOneWidget);
     });
 

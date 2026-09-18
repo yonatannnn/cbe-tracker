@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../core/money/etb_format.dart';
-import '../../core/parser/cbe_parser.dart';
 import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
@@ -289,8 +288,6 @@ class _TransactionRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tx = row;
-    final isCredit = tx.type == TxType.credit;
-    final signed = isCredit ? tx.amountCents : -tx.amountCents;
 
     String two(int v) => v.toString().padLeft(2, '0');
     final time =
@@ -314,9 +311,9 @@ class _TransactionRow extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        formatSignedCents(signed),
+                        formatCents(tx.amountCents),
                         style: AppTextStyles.moneyRow.copyWith(
-                          color: isCredit ? AppColors.credit : AppColors.debit,
+                          color: AppColors.credit,
                         ),
                       ),
                       const SizedBox(height: 1),

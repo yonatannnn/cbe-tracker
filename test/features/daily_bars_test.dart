@@ -53,12 +53,12 @@ void main() {
     expect(days.every((d) => d.isEmpty), isTrue);
   });
 
-  test('the scale is the tallest single bar, not the tallest net', () {
+  test('the scale is the tallest received bar; a stray debit never charts', () {
     final days = totalsByDay([
       entry(DateTime(2026, 9, 16), 30000),
       entry(DateTime(2026, 9, 16), 80000, TxType.debit),
     ], end);
-    expect(maxBarCents(days), 80000);
+    expect(maxBarCents(days), 30000);
     expect(maxBarCents(totalsByDay(const [], end)), 0);
   });
 }

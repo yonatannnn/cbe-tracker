@@ -108,10 +108,10 @@ void main() {
     // the sum is that one row.
     expect(find.text('Approve 1 transaction'), findsOneWidget);
     expect(find.text('Sum of the 1 selected'), findsOneWidget);
-    // The sum panel: the one checked credit in IN, nothing in OUT.
-    expect(find.text('IN'), findsOneWidget);
-    expect(find.text('ETB 5,000.00'), findsOneWidget);
-    expect(find.text('ETB 0.00'), findsOneWidget);
+    // One total — every receipt is money in. The ok row, the duplicate row
+    // (same fixture amount, struck through) and the panel all show it.
+    expect(find.text('TOTAL'), findsOneWidget);
+    expect(find.text('ETB 5,000.00'), findsNWidgets(3));
     // The duplicate says so, with the original's date.
     expect(
       find.text('Already saved before — Bole, 10/07/2026 at 09:00'),

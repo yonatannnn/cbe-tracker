@@ -12,10 +12,11 @@
 ///    confidence (she checks the row).
 ///  * A CBE app receipt ("ETB 1,000.00 has been debited from A ETB-4351 for
 ///    B ETB-7737") and a CBE USSD confirmation ("Completed ETB300.61 transfer
-///    From A to B-7737") are the SENDER's screen. Whether that is her sending
-///    or a customer paying her is decided by her account suffix (Settings →
-///    "My CBE account ends with"): receiver matches → credit, sender matches
-///    → debit, unknown → credit at LOW confidence.
+///    From A to B-7737") are the SENDER's screen. Her account suffix
+///    (Settings → "My CBE account ends with") confirms it: receiver matches →
+///    credit at HIGH confidence; anything else (her own account as sender, or
+///    no suffix set) → credit at LOW confidence, for her to look at. The app
+///    has no "money out": every filed receipt is a payment in.
 ///  * Her own CBE SMS ("your Account … has been Credited/Debited", "You have
 ///    received", "A debit transaction of", "You have successfully
 ///    transferred") keep the original parser and its keyword rules.
@@ -72,15 +73,15 @@ bool _endsWithSuffix(String? printed, String? suffix) {
   return digits.length >= suffix.length && digits.endsWith(suffix);
 }
 
-/// Direction for a sender's-screen CBE receipt, from the two account
-/// fragments on it. Null when the suffix settles nothing.
+/// Whether a sender's-screen CBE receipt is confirmed as a payment INTO her
+/// account. Null when the suffix settles nothing — including when her own
+/// account is the sender, which is not a customer payment and gets reviewed.
 TxType? _directionBySuffix({
   required String? senderAccount,
   required String? receiverAccount,
   required String? suffix,
 }) {
   if (_endsWithSuffix(receiverAccount, suffix)) return TxType.credit;
-  if (_endsWithSuffix(senderAccount, suffix)) return TxType.debit;
   return null;
 }
 

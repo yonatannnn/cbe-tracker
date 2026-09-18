@@ -1,11 +1,9 @@
-/// Seven-day bar chart for the Reports tab: money in and money out per day.
+/// Seven-day bar chart for the Reports tab: money received per day.
 ///
-/// Plain widgets, no charting package (§5). Two series, so a legend is always
-/// shown, and the two are told apart by fill as well as hue — IN is a solid
-/// bar, OUT is an outlined one — because green against red alone is not
-/// enough for red-green colour blindness. Tapping a column selects that day
-/// for the report below, and the caption under the chart names the selected
-/// day's figures in words, so no bar needs a number printed on it.
+/// Plain widgets, no charting package (§5). One series, so the title names it
+/// and no legend is needed. Tapping a column selects that day for the report
+/// below, and the caption under the chart names the selected day's figure in
+/// words, so no bar needs a number printed on it.
 library;
 
 import 'package:flutter/material.dart';
@@ -32,8 +30,7 @@ class DailyBarsChart extends StatelessWidget {
   final ValueChanged<DateTime> onSelect;
 
   static const double _plotHeight = 120;
-  static const double _barWidth = 10;
-  static const double _barGap = 2;
+  static const double _barWidth = 18;
   static const double _minBar = 3;
 
   @override
@@ -49,16 +46,7 @@ class DailyBarsChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text('LAST 7 DAYS', style: AppTextStyles.label),
-              ),
-              const _LegendSwatch(label: 'In', solid: true),
-              const SizedBox(width: 12),
-              const _LegendSwatch(label: 'Out', solid: false),
-            ],
-          ),
+          const Text('RECEIVED · LAST 7 DAYS', style: AppTextStyles.label),
           const SizedBox(height: 8),
           SizedBox(
             height: _plotHeight + 26,
@@ -129,11 +117,7 @@ class _DayColumn extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _Bar(height: _height(totals.creditCents), solid: true),
-                  const SizedBox(width: DailyBarsChart._barGap),
-                  _Bar(height: _height(totals.debitCents), solid: false),
-                ],
+                children: [_Bar(height: _height(totals.creditCents))],
               ),
             ),
             // Baseline: one recessive rule the bars stand on.
@@ -163,66 +147,23 @@ class _DayColumn extends StatelessWidget {
   }
 }
 
-/// One bar. IN is solid credit green; OUT is a debit-red outline over a wash,
-/// so the pair reads apart without relying on hue.
+/// One bar, credit green, rounded at the top, standing on the baseline.
 class _Bar extends StatelessWidget {
-  const _Bar({required this.height, required this.solid});
+  const _Bar({required this.height});
 
   final double height;
-  final bool solid;
 
   @override
   Widget build(BuildContext context) {
-    const radius = BorderRadius.vertical(top: Radius.circular(4));
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
       width: DailyBarsChart._barWidth,
       height: height,
-      decoration: solid
-          ? const BoxDecoration(color: AppColors.credit, borderRadius: radius)
-          : BoxDecoration(
-              color: AppColors.debitWash,
-              borderRadius: radius,
-              border: height > 0
-                  ? Border.all(color: AppColors.debit, width: 1.5)
-                  : null,
-            ),
-    );
-  }
-}
-
-class _LegendSwatch extends StatelessWidget {
-  const _LegendSwatch({required this.label, required this.solid});
-
-  final String label;
-  final bool solid;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: solid
-              ? BoxDecoration(
-                  color: AppColors.credit,
-                  borderRadius: BorderRadius.circular(2),
-                )
-              : BoxDecoration(
-                  color: AppColors.debitWash,
-                  border: Border.all(color: AppColors.debit, width: 1.5),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-        ),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 11, color: AppColors.muted),
-        ),
-      ],
+      decoration: const BoxDecoration(
+        color: AppColors.credit,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+      ),
     );
   }
 }
@@ -246,8 +187,7 @@ class _Caption extends StatelessWidget {
         ? 'No transactions in the last 7 days'
         : totals.isEmpty
         ? '$name · no transactions'
-        : '$name · In ${formatCents(totals.creditCents)} · '
-              'Out ${formatCents(totals.debitCents)} · '
+        : '$name · ${formatCents(totals.creditCents)} received · '
               '${totals.count} ${totals.count == 1 ? 'transaction' : 'transactions'}';
     return Text(
       text,

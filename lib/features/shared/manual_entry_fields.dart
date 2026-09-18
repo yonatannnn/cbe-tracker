@@ -1,21 +1,21 @@
-/// Manual amount/type/reference form — the fallback for unreadable images
-/// (§FR-2) and the inline editor for AI-parsed / failed bulk rows (§FR-3).
+/// Manual amount/reference form — the fallback for unreadable images (§FR-2)
+/// and the inline editor for AI-parsed / failed bulk rows (§FR-3).
+///
+/// There is no credit/debit choice: every receipt she files is a customer
+/// paying in, so every transaction is money in.
 library;
 
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../core/money/etb_format.dart';
-import '../../core/parser/cbe_parser.dart';
 
 class ManualEntryFields extends StatefulWidget {
   const ManualEntryFields({
     super.key,
     required this.onAmountChanged,
-    required this.onTypeChanged,
     required this.onReferenceChanged,
     this.initialCents,
-    this.initialType = TxType.credit,
     this.initialReference = '',
     this.amountError,
     this.dense = false,
@@ -24,11 +24,9 @@ class ManualEntryFields extends StatefulWidget {
   /// Emits parsed cents, or null when the box is empty/invalid — the caller
   /// treats null as "not saveable" rather than guessing a number.
   final ValueChanged<int?> onAmountChanged;
-  final ValueChanged<TxType> onTypeChanged;
   final ValueChanged<String> onReferenceChanged;
 
   final int? initialCents;
-  final TxType initialType;
   final String initialReference;
   final String? amountError;
 
@@ -46,8 +44,6 @@ class _ManualEntryFieldsState extends State<ManualEntryFields> {
   late final TextEditingController _reference = TextEditingController(
     text: widget.initialReference,
   );
-  late TxType _type = widget.initialType;
-
   @override
   void dispose() {
     _amount.dispose();
@@ -71,18 +67,6 @@ class _ManualEntryFieldsState extends State<ManualEntryFields> {
             errorText: widget.amountError,
           ),
           onChanged: (value) => widget.onAmountChanged(parseCentsInput(value)),
-        ),
-        SizedBox(height: gap),
-        SegmentedButton<TxType>(
-          segments: const [
-            ButtonSegment(value: TxType.credit, label: Text('Credit')),
-            ButtonSegment(value: TxType.debit, label: Text('Debit')),
-          ],
-          selected: {_type},
-          onSelectionChanged: (selection) {
-            setState(() => _type = selection.first);
-            widget.onTypeChanged(selection.first);
-          },
         ),
         SizedBox(height: gap),
         TextField(

@@ -76,11 +76,11 @@ List<DayTotals> totalsByDay(Iterable<LedgerEntry> entries, DateTime endDay) {
 }
 
 /// The tallest bar in the window, for scaling. Zero when nothing happened.
+/// Only money received is charted — every receipt she files is a payment in.
 int maxBarCents(List<DayTotals> days) {
   var max = 0;
   for (final d in days) {
     if (d.creditCents > max) max = d.creditCents;
-    if (d.debitCents > max) max = d.debitCents;
   }
   return max;
 }

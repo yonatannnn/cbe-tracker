@@ -9,7 +9,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../core/money/etb_format.dart';
-import '../../core/parser/cbe_parser.dart';
 import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../services/service_providers.dart';
@@ -55,7 +54,6 @@ class _BodyState extends ConsumerState<_Body> {
 
   // Edit buffer, seeded from the stored values.
   late int? _cents = widget.row.amountCents;
-  late TxType _type = widget.row.type;
   late String _reference = widget.row.reference;
   late int _branchId = widget.row.branchId;
   String? _error;
@@ -70,7 +68,6 @@ class _BodyState extends ConsumerState<_Body> {
   /// abandoned 50,000.00, and Save would commit it as real money.
   void _resetBuffer() {
     _cents = _tx.amountCents;
-    _type = _tx.type;
     _reference = _tx.reference;
     _branchId = _tx.branchId;
   }
@@ -94,7 +91,6 @@ class _BodyState extends ConsumerState<_Body> {
             _tx.id,
             TransactionsCompanion(
               amountCents: Value(cents),
-              type: Value(_type),
               reference: Value(reference),
               branchId: Value(_branchId),
             ),
@@ -159,9 +155,6 @@ class _BodyState extends ConsumerState<_Body> {
     final theme = Theme.of(context);
     final branches =
         ref.watch(activeBranchesProvider).value ?? const <Branch>[];
-    final isCredit = _tx.type == TxType.credit;
-    final signed = isCredit ? _tx.amountCents : -_tx.amountCents;
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -170,14 +163,11 @@ class _BodyState extends ConsumerState<_Body> {
         const SizedBox(height: 16),
 
         Text(
-          formatSignedCents(signed),
-          style: AppTextStyles.money.copyWith(
-            color: isCredit ? AppColors.credit : theme.colorScheme.error,
-          ),
+          formatCents(_tx.amountCents),
+          style: AppTextStyles.money.copyWith(color: AppColors.credit),
         ),
         const SizedBox(height: 12),
 
-        _Field(label: 'Type', value: isCredit ? 'Credit' : 'Debit'),
         _Field(label: 'Reference', value: _tx.reference, mono: true),
         _Field(label: 'Date', value: _formatDateTime(_tx.transactionDate)),
         _Field(
@@ -226,14 +216,12 @@ class _BodyState extends ConsumerState<_Body> {
         if (_editing) ...[
           ManualEntryFields(
             initialCents: _cents,
-            initialType: _type,
             initialReference: _reference,
             amountError: _error,
             onAmountChanged: (cents) => setState(() {
               _cents = cents;
               _error = null;
             }),
-            onTypeChanged: (type) => _type = type,
             onReferenceChanged: (reference) => _reference = reference,
           ),
           const SizedBox(height: 12),

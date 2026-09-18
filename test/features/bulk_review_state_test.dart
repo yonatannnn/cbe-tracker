@@ -140,19 +140,10 @@ void main() {
       expect(state.checkedCount, 0);
     });
 
-    test('amount alone is not enough without a type', () {
+    test('every row is money in — a failed row needs only an amount', () {
       var state = ReviewState.initial([failed()]);
+      expect(state.rows.single.effectiveType, TxType.credit);
       state = state.editAmount(0, 500000);
-      // A failed item has no parsed type to fall back on.
-      expect(state.rows.single.effectiveType, isNull);
-      expect(state.rows.single.isCheckable, isFalse);
-      expect(state.checkedCount, 0);
-    });
-
-    test('amount + type makes it checkable AND auto-checks it', () {
-      var state = ReviewState.initial([failed()]);
-      state = state.editAmount(0, 500000);
-      state = state.editType(0, TxType.credit);
 
       expect(state.rows.single.isCheckable, isTrue);
       expect(state.rows.single.checked, isTrue);
@@ -163,7 +154,6 @@ void main() {
     test('clearing the amount un-checks it again', () {
       var state = ReviewState.initial([failed()]);
       state = state.editAmount(0, 500000);
-      state = state.editType(0, TxType.credit);
       expect(state.checkedCount, 1);
 
       // Emptying the box must genuinely clear, not keep the old value.
@@ -176,7 +166,6 @@ void main() {
     test('zero is not a valid amount', () {
       var state = ReviewState.initial([failed()]);
       state = state.editAmount(0, 0);
-      state = state.editType(0, TxType.credit);
       expect(state.rows.single.isCheckable, isFalse);
     });
   });
@@ -244,33 +233,28 @@ void main() {
       expect(state.failedCount, 1);
     });
 
-    test('sums only checked rows, credits and debits apart, in cents', () {
+    test('sums only the checked rows, in cents', () {
       var state = ReviewState.initial([
         ok(cents: 500000),
+        // Whatever a receipt says, it is a payment in — it adds.
         ok(cents: 250000, type: TxType.debit),
         ai(cents: 100000), // starts unchecked
         dup(), // never counted
       ]);
-      expect(state.creditCents, 500000);
-      expect(state.debitCents, 250000);
-      expect(state.netCents, 250000);
+      expect(state.totalCents, 750000);
 
       state = state.toggle(2, checked: true);
-      expect(state.creditCents, 600000);
-      expect(state.netCents, 350000);
+      expect(state.totalCents, 850000);
 
       state = state.toggle(0, checked: false);
-      expect(state.creditCents, 100000);
-      expect(state.netCents, -150000);
+      expect(state.totalCents, 350000);
     });
 
     test('a filled-in failed row joins the sum', () {
       var state = ReviewState.initial([failed()]);
-      expect(state.netCents, 0);
+      expect(state.totalCents, 0);
       state = state.editAmount(0, 75000);
-      state = state.editType(0, TxType.debit);
-      expect(state.debitCents, 75000);
-      expect(state.netCents, -75000);
+      expect(state.totalCents, 75000);
     });
   });
 
@@ -325,7 +309,6 @@ void main() {
         failed(),
       ]);
       state = state.editAmount(1, 1000);
-      state = state.editType(1, TxType.debit);
       state = state.editReference(1, 'FT26AAAA');
       expect(state.checkedCount, 2);
       expect(state.conflictingReference, 'FT26AAAA');

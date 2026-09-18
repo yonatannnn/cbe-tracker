@@ -10,6 +10,10 @@ them once she approves; per-branch balances and end-of-day reports follow.
 (SMS reading and reconciliation were removed in September 2026: the app asks
 for no SMS permission and reads no messages.)
 
+**Every transaction is money in.** She only ever files receipts of customers
+paying a branch; the app has no debit side in its interface (no OUT, no
+credit/debit choice, no signed amounts). The `type` column stays `credit`.
+
 **Design principle: automation first.** The user never types transaction
 data. She picks a branch, adds screenshots, and confirms. OCR fills
 everything else. Manual editing exists only as a fallback for unreadable

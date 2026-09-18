@@ -106,9 +106,7 @@ class _TotalPanel extends ConsumerWidget {
         const SizedBox(height: AppSpacing.sm),
         Text(
           amount.maybeWhen(
-            data: (cents) => period.isMovement
-                ? formatSignedCents(cents)
-                : formatCents(cents),
+            data: (cents) => formatCents(cents),
             orElse: () => '—',
           ),
           style: AppTextStyles.money.copyWith(
@@ -118,10 +116,10 @@ class _TotalPanel extends ConsumerWidget {
         if (showTodayLine && todayDelta != 0) ...[
           const SizedBox(height: AppSpacing.xs),
           Text(
-            '${formatSignedCents(todayDelta)} today',
+            '${formatCents(todayDelta)} received today',
             style: AppTextStyles.moneyRow.copyWith(
               fontSize: 14,
-              color: todayDelta > 0 ? AppColors.credit : AppColors.debit,
+              color: AppColors.credit,
             ),
           ),
         ],
@@ -133,15 +131,12 @@ class _TotalPanel extends ConsumerWidget {
   }
 }
 
-/// The colour a period figure reads in. Movement is signed — green up, red
-/// down, neutral at zero. An all-time balance is a standing figure: neutral ink
-/// unless it's underwater, where red flags a debt. Shared with the branch rows
-/// so the whole page speaks one colour language.
+/// The colour a period figure reads in. Money only ever comes in, so a window
+/// with movement reads green; the all-time total is a standing figure in
+/// neutral ink. Shared with the branch rows so the page speaks one language.
 Color periodAmountColor(Period period, int cents) {
-  if (!period.isMovement) return cents < 0 ? AppColors.debit : AppColors.ink;
-  if (cents > 0) return AppColors.credit;
-  if (cents < 0) return AppColors.debit;
-  return AppColors.ink;
+  if (!period.isMovement) return AppColors.ink;
+  return cents > 0 ? AppColors.credit : AppColors.ink;
 }
 
 /// Retunes what the headline and branch cards measure: a preset window, or a
@@ -320,11 +315,7 @@ class _BranchRow extends ConsumerWidget {
               ),
             ),
             Text(
-              cents == null
-                  ? '—'
-                  : period.isMovement
-                  ? formatSignedCents(cents)
-                  : formatCents(cents),
+              cents == null ? '—' : formatCents(cents),
               style: AppTextStyles.moneyRow.copyWith(
                 color: periodAmountColor(period, cents ?? 0),
               ),

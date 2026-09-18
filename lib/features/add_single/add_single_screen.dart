@@ -48,7 +48,6 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
 
   // Manual-edit values, pre-filled from the parse when there is one.
   int? _manualCents;
-  TxType _manualType = TxType.credit;
   String _manualReference = '';
   String? _amountError;
 
@@ -103,11 +102,10 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
   void _prefillFrom(ParsedCbeMessage parsed) {
     _manualCents = parsed.amountCents;
     _manualReference = parsed.reference ?? '';
-    _manualType = parsed.type;
   }
 
-  /// Amount/type/reference to save: the manual fields when the user opened the
-  /// editor, otherwise exactly what was parsed.
+  /// Amount/reference to save: the manual fields when the user opened the
+  /// editor, otherwise exactly what was parsed. Every receipt is money in.
   ({int cents, TxType type, String reference})? _resolveEntry() {
     final outcome = _outcome;
     final parsed = outcome is ParseSuccess ? outcome.parsed : null;
@@ -115,7 +113,7 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
     if (!_manualOpen && parsed != null) {
       return (
         cents: parsed.amountCents,
-        type: parsed.type,
+        type: TxType.credit,
         // aiParsed results can have an unreadable reference.
         reference: parsed.reference ?? manualReference(),
       );
@@ -129,7 +127,7 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
     final typed = _manualReference.trim();
     return (
       cents: cents,
-      type: _manualType,
+      type: TxType.credit,
       reference: typed.isEmpty ? manualReference() : typed,
     );
   }
@@ -377,21 +375,19 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
       padding: const EdgeInsets.only(bottom: 16),
       child: ManualEntryFields(
         initialCents: _manualCents,
-        initialType: _manualType,
         initialReference: _manualReference,
         amountError: _amountError,
         onAmountChanged: (cents) => setState(() {
           _manualCents = cents;
           _amountError = null;
         }),
-        onTypeChanged: (type) => _manualType = type,
         onReferenceChanged: (ref) => _manualReference = ref,
       ),
     );
   }
 }
 
-/// Read-only parsed summary: thumbnail, signed amount, badge, mono reference.
+/// Read-only parsed summary: thumbnail, amount, mono reference.
 class _SummaryCard extends ConsumerWidget {
   const _SummaryCard({required this.parsed, required this.image});
 
@@ -401,9 +397,6 @@ class _SummaryCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final isCredit = parsed.type == TxType.credit;
-    final signed = isCredit ? parsed.amountCents : -parsed.amountCents;
-    final color = isCredit ? AppColors.credit : theme.colorScheme.error;
 
     return Card(
       child: Padding(
@@ -428,11 +421,11 @@ class _SummaryCard extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        formatSignedCents(signed),
-                        style: AppTextStyles.money.copyWith(color: color),
+                        formatCents(parsed.amountCents),
+                        style: AppTextStyles.money.copyWith(
+                          color: AppColors.credit,
+                        ),
                       ),
-                      const SizedBox(height: 6),
-                      _TypeBadge(isCredit: isCredit),
                     ],
                   ),
                 ),
@@ -486,35 +479,6 @@ class _AiBadge extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TypeBadge extends StatelessWidget {
-  const _TypeBadge({required this.isCredit});
-
-  final bool isCredit;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final bg = isCredit ? scheme.primaryContainer : scheme.errorContainer;
-    final fg = isCredit ? scheme.onPrimaryContainer : scheme.onErrorContainer;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        isCredit ? 'CREDIT' : 'DEBIT',
-        style: TextStyle(
-          color: fg,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.6,
-        ),
       ),
     );
   }

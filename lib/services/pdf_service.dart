@@ -9,7 +9,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../core/money/etb_format.dart';
-import '../core/parser/cbe_parser.dart';
 import 'report_service.dart';
 
 /// Fonts for the document.
@@ -139,8 +138,7 @@ class PdfService {
         children: [
           _stat('Branches', '${report.activeBranches.length}'),
           _stat('Transactions', '${report.totalTransactionCount}'),
-          _stat('Credited', formatCents(report.totalCreditedCents)),
-          _stat('Debited', formatCents(report.totalDebitedCents)),
+          _stat('Received', formatCents(report.totalCreditedCents)),
           _stat('Closing', formatCents(report.totalClosingCents), bold: true),
         ],
       ),
@@ -202,12 +200,11 @@ class PdfService {
   pw.Widget _figuresTable(BranchDayReport branch) {
     final s = branch.summary;
     return pw.TableHelper.fromTextArray(
-      headers: const ['Opening', 'Credited', 'Debited', 'Closing', 'Count'],
+      headers: const ['Opening', 'Received', 'Closing', 'Count'],
       data: [
         [
           formatCents(s.openingCents),
           formatCents(s.creditedCents),
-          formatCents(s.debitedCents),
           formatCents(s.closingCents),
           '${s.txCount}',
         ],
@@ -240,9 +237,7 @@ class PdfService {
         for (final row in branch.transactions)
           [
             _time(row.transactionDate),
-            formatSignedCents(
-              row.type == TxType.credit ? row.amountCents : -row.amountCents,
-            ),
+            formatCents(row.amountCents),
             row.reference,
           ],
       ],

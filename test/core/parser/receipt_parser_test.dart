@@ -30,11 +30,12 @@ void main() {
       expect(p.counterparty, 'Getu Tolosa Tola');
     });
 
-    test('her own outgoing transfer → debit, HIGH', () {
+    test('her own account as the SENDER is not a customer payment → LOW', () {
+      // The app has no money-out; a receipt she sent herself comes back for
+      // her to look at rather than being filed as a payment in.
       final p = parseReceiptText(raw, ownerAccountSuffix: '4351');
-      expect(p.type, TxType.debit);
-      expect(p.confidence, Confidence.high);
-      expect(p.counterparty, 'Sosina Tilahun Getachew');
+      expect(p.type, TxType.credit);
+      expect(p.confidence, Confidence.low);
     });
 
     test('no account suffix set → credit, LOW (she checks)', () {

@@ -91,7 +91,7 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
           TransactionsCompanion.insert(
             branchId: widget.branchId,
             amountCents: row.effectiveCents!,
-            type: row.effectiveType!,
+            type: TxType.credit,
             reference: row.effectiveReference(),
             source: TxSource.screenshot,
             transactionDate: transactionDateFor(
@@ -260,8 +260,6 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
                   ),
                   onAmount: (cents) =>
                       setState(() => _state = _state.editAmount(i, cents)),
-                  onType: (type) =>
-                      setState(() => _state = _state.editType(i, type)),
                   onReference: (ref) =>
                       setState(() => _state = _state.editReference(i, ref)),
                 ),
@@ -321,7 +319,6 @@ class _ReviewRowTile extends StatelessWidget {
     required this.onToggle,
     required this.onExpand,
     required this.onAmount,
-    required this.onType,
     required this.onReference,
   });
 
@@ -332,7 +329,6 @@ class _ReviewRowTile extends StatelessWidget {
   final ValueChanged<bool> onToggle;
   final ValueChanged<bool> onExpand;
   final ValueChanged<int?> onAmount;
-  final ValueChanged<TxType> onType;
   final ValueChanged<String> onReference;
 
   // Every row uses the same frame — [leading 48] [thumb] [body] [trailing 48]
@@ -425,9 +421,6 @@ class _ReviewRowTile extends StatelessWidget {
     final theme = Theme.of(context);
     final needsCheck = row.status == BulkStatus.okAiParsed;
     final cents = row.effectiveCents ?? 0;
-    final type = row.effectiveType ?? TxType.credit;
-    final isCredit = type == TxType.credit;
-    final signed = isCredit ? cents : -cents;
     final origin = _origin(row.item.parsed);
 
     return Column(
@@ -444,13 +437,12 @@ class _ReviewRowTile extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
-                  formatSignedCents(signed),
+                  formatCents(cents),
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: isCredit ? AppColors.credit : AppColors.debit,
+                    color: AppColors.credit,
                   ),
                 ),
-                _TypeBadge(isCredit: isCredit),
                 if (needsCheck)
                   _AiBadge(
                     local: row.item.parsed?.confidence == Confidence.low,
@@ -480,7 +472,6 @@ class _ReviewRowTile extends StatelessWidget {
     final existing = row.item.existing;
     final earlier = row.item.duplicateOf;
     final cents = row.item.parsed?.amountCents ?? 0;
-    final isCredit = row.item.parsed?.type == TxType.credit;
 
     final String reason;
     if (existing != null) {
@@ -506,7 +497,7 @@ class _ReviewRowTile extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
-              formatSignedCents(isCredit ? cents : -cents),
+              formatCents(cents),
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
                 color: theme.colorScheme.outline,
@@ -575,10 +566,8 @@ class _ReviewRowTile extends StatelessWidget {
       child: ManualEntryFields(
         dense: true,
         initialCents: row.effectiveCents,
-        initialType: row.effectiveType ?? TxType.credit,
         initialReference: row.item.parsed?.reference ?? '',
         onAmountChanged: onAmount,
-        onTypeChanged: onType,
         onReferenceChanged: onReference,
       ),
     );
@@ -592,10 +581,7 @@ class _ReviewRowTile extends StatelessWidget {
     final to = parsed.recipient;
     final parts = <String>[
       ?parsed.bank,
-      if (who != null)
-        '${parsed.type == TxType.credit ? 'from' : 'to'} $who'
-      else if (to != null)
-        'to $to',
+      if (who != null) 'from $who' else if (to != null) 'to $to',
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
@@ -604,33 +590,6 @@ class _ReviewRowTile extends StatelessWidget {
     String two(int v) => v.toString().padLeft(2, '0');
     return '${two(date.day)}/${two(date.month)}/${date.year} '
         'at ${two(date.hour)}:${two(date.minute)}';
-  }
-}
-
-class _TypeBadge extends StatelessWidget {
-  const _TypeBadge({required this.isCredit});
-
-  final bool isCredit;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: isCredit ? scheme.primaryContainer : scheme.errorContainer,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        isCredit ? 'CREDIT' : 'DEBIT',
-        style: TextStyle(
-          color: isCredit ? scheme.onPrimaryContainer : scheme.onErrorContainer,
-          fontSize: 9,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
   }
 }
 
@@ -719,9 +678,9 @@ class _ReadSummary extends StatelessWidget {
   }
 }
 
-/// What approving adds up to: money in, money out, and the net change to the
-/// branch. Follows the checkboxes live, so unticking a row is visible in the
-/// total before she approves.
+/// What approving adds up to. Every receipt is money in, so there is one
+/// figure: the total of the checked rows. It follows the checkboxes live, so
+/// unticking a row is visible in the total before she approves.
 class _SumPanel extends StatelessWidget {
   const _SumPanel({required this.state});
 
@@ -729,90 +688,46 @@ class _SumPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final net = state.netCents;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: _SumCell(
-                  label: 'IN',
-                  value: formatCents(state.creditCents),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('TOTAL', style: AppTextStyles.label),
+                const SizedBox(height: 2),
+                Text(
+                  state.checkedCount == 0
+                      ? 'Nothing selected'
+                      : 'Sum of the ${state.checkedCount} selected',
+                  style: AppTextStyles.label.copyWith(
+                    letterSpacing: 0,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                formatCents(state.totalCents),
+                maxLines: 1,
+                style: AppTextStyles.money.copyWith(
+                  fontSize: 26,
                   color: AppColors.credit,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _SumCell(
-                  label: 'OUT',
-                  value: formatCents(state.debitCents),
-                  color: AppColors.debit,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _SumCell(
-                  label: 'NET',
-                  value: formatSignedCents(net),
-                  color: net < 0 ? AppColors.debit : AppColors.credit,
-                  alignEnd: true,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            state.checkedCount == 0
-                ? 'Nothing selected'
-                : 'Sum of the ${state.checkedCount} selected',
-            style: AppTextStyles.label.copyWith(
-              letterSpacing: 0,
-              fontWeight: FontWeight.w400,
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SumCell extends StatelessWidget {
-  const _SumCell({
-    required this.label,
-    required this.value,
-    required this.color,
-    this.alignEnd = false,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-  final bool alignEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: alignEnd
-          ? CrossAxisAlignment.end
-          : CrossAxisAlignment.start,
-      children: [
-        Text(label, style: AppTextStyles.label),
-        const SizedBox(height: 2),
-        // A six-figure sum must shrink to fit its third, never run into the
-        // next cell or wrap onto a second line.
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
-          child: Text(
-            value,
-            maxLines: 1,
-            style: AppTextStyles.moneyRow.copyWith(color: color),
-          ),
-        ),
-      ],
     );
   }
 }
