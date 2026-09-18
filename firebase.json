@@ -1,5 +1,1 @@
-{
-  "firestore": {
-    "rules": "firestore.rules"
-  }
-}
+{"firestore":{"rules":"firestore.rules"},"flutter":{"platforms":{"android":{"default":{"projectId":"cbe-tracker-2026","appId":"1:88371688260:android:aa41d07a43a45225925d11","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"cbe-tracker-2026","configurations":{"android":"1:88371688260:android:aa41d07a43a45225925d11"}}}}}}

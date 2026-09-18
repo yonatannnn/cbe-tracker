@@ -1,13 +1,18 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Books are filed by the user's NAME, not by device, so any signed-in
-    // (anonymous) install of the app may read and write them. This is what
-    // lets a reinstall or a second phone typing the same name see the same
-    // branches. It also means anyone with the app can reach any name — fine
-    // for a private single-client build, not for a public one.
+    // Books are filed by the user's NAME, not by device, so any install of the
+    // app may read and write them — that is what lets a reinstall or a second
+    // phone typing the same name see the same branches.
+    //
+    // OPEN for now: anonymous sign-in is not yet enabled on the project (one
+    // click in the Firebase console: Authentication → Sign-in method →
+    // Anonymous). Once it is, change the condition to
+    //   if request.auth != null
+    // and redeploy with `firebase deploy --only firestore:rules`.
+    // Fine for a private single-client build; not for a public one.
     match /users/{userKey}/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
   }
 }

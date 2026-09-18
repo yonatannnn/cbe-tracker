@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "88371688260",
+    "project_id": "cbe-tracker-2026",
+    "storage_bucket": "cbe-tracker-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:88371688260:android:aa41d07a43a45225925d11",
+        "android_client_info": {
+          "package_name": "com.yonatan.cbe_tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAPd-JHVlgX2M0m7rDd6FRdvWGQW4g6iOY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

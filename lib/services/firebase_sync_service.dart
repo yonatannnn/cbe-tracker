@@ -14,9 +14,9 @@
 ///     branches/{branchId}                 {name, archived, createdAt}
 ///       transactions/{reference}          {amountCents, reference, …}
 ///
-/// Sign-in is anonymous: the rules only require a signed-in device. The data
-/// is filed by name, not by device, so a reinstall or a second phone typing
-/// the same name writes to the same books.
+/// Sign-in is anonymous and best-effort. The data is filed by name, not by
+/// device, so a reinstall or a second phone typing the same name writes to
+/// the same books.
 library;
 
 import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
@@ -76,9 +76,16 @@ class FirebaseSyncService {
   /// every hook is a no-op.
   static bool get isAvailable => Firebase.apps.isNotEmpty;
 
+  /// Best-effort anonymous sign-in. The project's Auth may not be switched
+  /// on yet (it needs one click in the Firebase console); until it is, the
+  /// rules are open and the writes go through unsigned.
   Future<void> _signIn() async {
     if (auth.currentUser != null) return;
-    await auth.signInAnonymously();
+    try {
+      await auth.signInAnonymously();
+    } on Object catch (error) {
+      diagnostic('cloud sign-in skipped: ${error.runtimeType}');
+    }
   }
 
   DocumentReference<Map<String, dynamic>> _user(Profile profile) =>
