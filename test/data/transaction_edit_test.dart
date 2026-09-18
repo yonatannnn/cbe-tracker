@@ -105,7 +105,9 @@ void main() {
       await addTx(reference: 'FTNEWER00001', date: DateTime(2026, 7, 14, 9, 0));
       await addTx(reference: 'FTOLDER00001', date: DateTime(2026, 7, 14, 8, 0));
 
-      final rows = await db.transactionDao.watchTransactionsForBranch(bole).first;
+      final rows = await db.transactionDao
+          .watchTransactionsForBranch(bole)
+          .first;
       expect(rows.map((r) => r.reference), ['FTNEWER00001', 'FTOLDER00001']);
     });
 
@@ -113,7 +115,9 @@ void main() {
       await addTx(reference: 'FTBOLE000001');
       await addTx(reference: 'FTCMC0000001', branchId: cmc);
 
-      final rows = await db.transactionDao.watchTransactionsForBranch(bole).first;
+      final rows = await db.transactionDao
+          .watchTransactionsForBranch(bole)
+          .first;
       expect(rows.map((r) => r.reference), ['FTBOLE000001']);
     });
 

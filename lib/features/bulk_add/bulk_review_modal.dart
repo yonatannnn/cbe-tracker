@@ -15,6 +15,7 @@ import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
 import '../../services/bulk_processor.dart';
+import '../../services/parse_pipeline.dart' show unreadableMessage;
 import '../../services/service_providers.dart';
 import '../shared/manual_entry_fields.dart';
 import 'bulk_review_state.dart';
@@ -360,6 +361,11 @@ class _ReviewRowTile extends StatelessWidget {
               value: row.checked,
               onChanged: (v) => onToggle(v ?? false),
             ),
+            // An AI reading is checked against the picture, so show it.
+            if (isAi) ...[
+              _Thumb(image: row.item.image),
+              const SizedBox(width: 10),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -388,6 +394,13 @@ class _ReviewRowTile extends StatelessWidget {
                       color: theme.colorScheme.outline,
                     ),
                   ),
+                  if (_origin(row.item.parsed) case final origin?)
+                    Text(
+                      origin,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -441,7 +454,10 @@ class _ReviewRowTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
                       formatSignedCents(isCredit ? cents : -cents),
@@ -451,7 +467,6 @@ class _ReviewRowTile extends StatelessWidget {
                         decoration: TextDecoration.lineThrough,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     const _NotSavedBadge(),
                   ],
                 ),
@@ -498,7 +513,7 @@ class _ReviewRowTile extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                "#$number · Couldn't read this picture",
+                '#$number · ${unreadableMessage(row.item.aiFailure)}',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.error,
                 ),
@@ -534,6 +549,17 @@ class _ReviewRowTile extends StatelessWidget {
         onReferenceChanged: onReference,
       ),
     );
+  }
+
+  /// "Awash Bank · from ESRAEL TOLOSA TOLA" — only the AI path knows these.
+  static String? _origin(ParsedCbeMessage? parsed) {
+    if (parsed == null) return null;
+    final who = parsed.counterparty;
+    final parts = <String>[
+      ?parsed.bank,
+      if (who != null) '${parsed.type == TxType.credit ? 'from' : 'to'} $who',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 
   static String _formatDate(DateTime date) {

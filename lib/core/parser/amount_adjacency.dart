@@ -50,7 +50,11 @@ class KeywordHit {
 
 /// An amount proven to sit next to a keyword.
 class AmountAdjacency {
-  const AmountAdjacency({required this.amount, required this.keyword, required this.gap});
+  const AmountAdjacency({
+    required this.amount,
+    required this.keyword,
+    required this.gap,
+  });
 
   final AmountHit amount;
   final KeywordHit keyword;
@@ -126,7 +130,14 @@ const Map<TxType, List<String>> _canonicalWords = {
 /// The above plus the synonyms the AI prompt is allowed to use.
 const Map<TxType, List<String>> _extendedWords = {
   TxType.credit: ['credited', 'received', 'deposited'],
-  TxType.debit: ['debited', 'debit', 'transferred', 'withdrawn', 'deducted', 'paid'],
+  TxType.debit: [
+    'debited',
+    'debit',
+    'transferred',
+    'withdrawn',
+    'deducted',
+    'paid',
+  ],
 };
 
 /// Collapses every whitespace run to a single space. All offsets used by this
@@ -136,8 +147,10 @@ String normalizeCbeText(String raw) =>
 
 /// Builds a whitespace-tolerant matcher, so an OCR line break inside a word or
 /// a number ("Cred ited", "5,0 00.00") still matches once normalized.
-RegExp _loose(String literal) =>
-    RegExp(literal.split('').map(RegExp.escape).join(r'\s*'), caseSensitive: false);
+RegExp _loose(String literal) => RegExp(
+  literal.split('').map(RegExp.escape).join(r'\s*'),
+  caseSensitive: false,
+);
 
 /// All credited/debited-family keyword occurrences in [normalized].
 List<KeywordHit> findTypeKeywords(
@@ -200,11 +213,7 @@ List<AmountHit> findCurrencyAmounts(String normalized) {
     // Bracket the digits only, so gaps are measured the same way as in
     // findAmountOccurrences.
     hits.add(
-      AmountHit(
-        cents: cents,
-        start: match.end - digits.length,
-        end: match.end,
-      ),
+      AmountHit(cents: cents, start: match.end - digits.length, end: match.end),
     );
   }
   return hits;
@@ -236,9 +245,7 @@ List<AmountHit> findAmountOccurrences(String normalized, int cents) {
     for (final match in _loose(variant).allMatches(normalized)) {
       if (!_hasNumericBoundary(normalized, match.start, match.end)) continue;
       if (!seen.add(match.start)) continue; // same spot via another variant
-      hits.add(
-        AmountHit(cents: cents, start: match.start, end: match.end),
-      );
+      hits.add(AmountHit(cents: cents, start: match.start, end: match.end));
     }
   }
   hits.sort((a, b) => a.start.compareTo(b.start));

@@ -71,15 +71,15 @@ void main() {
         // Deterministic day → the default all-time period, no rollover timer.
         todayProvider.overrideWith(_FixedToday.new),
         activeBranchesProvider.overrideWithValue(AsyncValue.data(branches)),
-        totalBalanceCentsProvider.overrideWithValue(AsyncValue.data(totalCents)),
+        totalBalanceCentsProvider.overrideWithValue(
+          AsyncValue.data(totalCents),
+        ),
         todayDeltaCentsProvider.overrideWithValue(
           AsyncValue.data(todayDeltaCents),
         ),
         // The dashboard headline reads the period figure; at the default
         // all-time window it equals the total balance.
-        periodDeltaCentsProvider.overrideWithValue(
-          AsyncValue.data(totalCents),
-        ),
+        periodDeltaCentsProvider.overrideWithValue(AsyncValue.data(totalCents)),
         branchBalanceCentsProvider(
           bole.id,
         ).overrideWithValue(AsyncValue.data(branchBalanceCents)),
@@ -197,7 +197,11 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        app(branches: [bole], totalCents: 14520000, branchBalanceCents: 14520000),
+        app(
+          branches: [bole],
+          totalCents: 14520000,
+          branchBalanceCents: 14520000,
+        ),
       );
       await tester.pumpAndSettle();
 

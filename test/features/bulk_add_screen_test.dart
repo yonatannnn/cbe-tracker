@@ -74,6 +74,9 @@ void main() {
   ) async {
     await pump(tester);
     expect(find.widgetWithText(AppBar, 'Bulk upload'), findsOneWidget);
-    expect(find.text('Which branch are these screenshots for?'), findsOneWidget);
+    expect(
+      find.text('Which branch are these screenshots for?'),
+      findsOneWidget,
+    );
   });
 }

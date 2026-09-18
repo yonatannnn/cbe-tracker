@@ -101,10 +101,21 @@ class _BulkAddScreenState extends ConsumerState<BulkAddScreen> {
     );
 
     BulkProgress? last;
-    await for (final progress in processor.process(_images)) {
+    try {
+      await for (final progress in processor.process(_images)) {
+        if (!mounted) return;
+        last = progress;
+        setState(() => _progress = progress);
+      }
+    } on Object {
       if (!mounted) return;
-      last = progress;
-      setState(() => _progress = progress);
+      setState(() => _step = _Step.pickImages);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not finish processing. Please try again.'),
+        ),
+      );
+      return;
     }
 
     if (!mounted || last == null) return;

@@ -95,7 +95,11 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin
         >();
-    return await ios?.requestPermissions(alert: true, badge: true, sound: true) ??
+    return await ios?.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        ) ??
         false;
   }
 

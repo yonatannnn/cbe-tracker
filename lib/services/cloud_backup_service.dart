@@ -82,8 +82,7 @@ class SupabaseCloudBackend implements CloudBackend {
   @override
   Future<void> signIn(String email, String password) async {
     try {
-      await _client.auth
-          .signInWithPassword(email: email, password: password);
+      await _client.auth.signInWithPassword(email: email, password: password);
     } on AuthException catch (e) {
       throw CloudBackupException(e.message);
     }
@@ -110,7 +109,9 @@ class SupabaseCloudBackend implements CloudBackend {
   @override
   Future<void> upload(String fileName, List<int> bytes) async {
     try {
-      await _client.storage.from(bucket).uploadBinary(
+      await _client.storage
+          .from(bucket)
+          .uploadBinary(
             '$_uid/$fileName',
             Uint8List.fromList(bytes),
             fileOptions: const FileOptions(
@@ -132,8 +133,9 @@ class SupabaseCloudBackend implements CloudBackend {
           .map(
             (o) => CloudBackupEntry(
               name: o.name,
-              createdAt:
-                  o.createdAt == null ? null : DateTime.tryParse(o.createdAt!),
+              createdAt: o.createdAt == null
+                  ? null
+                  : DateTime.tryParse(o.createdAt!),
             ),
           )
           .toList();

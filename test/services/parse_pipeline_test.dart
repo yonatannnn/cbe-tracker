@@ -1,12 +1,14 @@
 // Pipeline branching with a fake OCR service and a fake AI fallback — no ML
 // Kit, no network.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cbe_tracker/core/parser/cbe_parser.dart';
 import 'package:cbe_tracker/services/gemini_fallback_service.dart';
 import 'package:cbe_tracker/services/ocr_service.dart';
 import 'package:cbe_tracker/services/parse_pipeline.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeOcr implements OcrService {
@@ -22,17 +24,33 @@ class _FakeOcr implements OcrService {
   Future<void> dispose() async => disposed = true;
 }
 
+class _CallbackOcr implements OcrService {
+  _CallbackOcr(this.read);
+  final Future<String> Function() read;
+
+  @override
+  Future<String> extractText(File image) => read();
+
+  @override
+  Future<void> dispose() async {}
+}
+
 class _FakeAi implements CbeAiFallback {
   _FakeAi(this.result);
 
   final ParsedCbeMessage? result;
   var callCount = 0;
   String? sawText;
+  AiImage? sawImage;
 
   @override
-  Future<ParsedCbeMessage?> parse(String rawText) async {
+  AiFailure? lastFailure;
+
+  @override
+  Future<ParsedCbeMessage?> parse(String rawText, {AiImage? image}) async {
     callCount++;
     sawText = rawText;
+    sawImage = image;
     return result;
   }
 }
@@ -87,7 +105,8 @@ void main() {
     expect(outcome, isA<ParseSuccess>());
     expect((outcome as ParseSuccess).parsed.confidence, Confidence.aiParsed);
     expect(ai.callCount, 1);
-    expect(ai.sawText, lowConfidenceText, reason: 'AI gets OCR text, no image');
+    expect(ai.sawText, lowConfidenceText, reason: 'AI gets the OCR text');
+    expect(ai.sawImage, isNull, reason: 'the file does not exist → text only');
   });
 
   test('ParseException escalates to AI; non-null → aiParsed success', () async {
@@ -121,8 +140,115 @@ void main() {
     expect((outcome as ParseUnreadable).rawText, unparseableText);
   });
 
+  test(
+    'regex failure uses validated Gemini extraction for unusual wording',
+    () async {
+      const text =
+          'You received 5,000.00 Birr on 14/07/2026 at 10:42. '
+          'Reference FT26195XKQ8T. Current Balance ETB 145,200.00.';
+      expect(() => parseCbeText(text), throwsA(isA<ParseException>()));
+      var calls = 0;
+      final pipeline = ParsePipeline(
+        ocr: _FakeOcr(text),
+        ai: GeminiFallbackService(
+          generator: (request) async {
+            calls++;
+            expect(request.prompt, contains(text));
+            return '{"amount": "5,000.00", "type": "credit", '
+                '"reference": "FT26195XKQ8T", "date": "2026-07-14T10:42:00", '
+                '"error": null}';
+          },
+        ),
+      );
+
+      final outcome = await pipeline.parse(image);
+      expect(outcome, isA<ParseSuccess>());
+      final parsed = (outcome as ParseSuccess).parsed;
+      expect(parsed.amountCents, 500000);
+      expect(parsed.type, TxType.credit);
+      expect(parsed.reference, 'FT26195XKQ8T');
+      expect(parsed.confidence, Confidence.aiParsed);
+      expect(calls, 1);
+    },
+  );
+
+  test('regex failure and invented Gemini amount remain unreadable', () async {
+    const text = 'You received 5,000.00 Birr.';
+    final pipeline = ParsePipeline(
+      ocr: _FakeOcr(text),
+      ai: GeminiFallbackService(
+        generator: (_) async => '{"amount": "9,000.00", "type": "credit"}',
+      ),
+    );
+
+    final outcome = await pipeline.parse(image);
+    expect(outcome, isA<ParseUnreadable>());
+    expect((outcome as ParseUnreadable).rawText, text);
+  });
+
+  test(
+    'native OCR failure is unreadable and the next image still works',
+    () async {
+      var calls = 0;
+      final ai = _FakeAi(null);
+      final pipeline = ParsePipeline(
+        ocr: _CallbackOcr(() async {
+          if (calls++ == 0) {
+            throw PlatformException(
+              code: 'error',
+              message: 'ML Kit init failed',
+            );
+          }
+          return highConfidenceText;
+        }),
+        ai: ai,
+      );
+      final failed = await pipeline.parse(image);
+      expect(failed, isA<ParseUnreadable>());
+      expect((failed as ParseUnreadable).rawText, isEmpty);
+      expect(await pipeline.parse(image), isA<ParseSuccess>());
+      expect(ai.callCount, 0);
+    },
+  );
+
+  testWidgets('stalled OCR times out without calling Gemini', (tester) async {
+    final pending = Completer<String>();
+    final ai = _FakeAi(null);
+    final pipeline = ParsePipeline(
+      ocr: _CallbackOcr(() => pending.future),
+      ai: ai,
+    );
+    ParseOutcome? outcome;
+    unawaited(pipeline.parse(image).then((value) => outcome = value));
+    await tester.pump(ParsePipeline.ocrTimeout);
+    expect(outcome, isA<ParseUnreadable>());
+    expect(ai.callCount, 0);
+
+    // A late native response must not replace the already returned outcome.
+    pending.complete(highConfidenceText);
+    await tester.pump();
+    expect(outcome, isA<ParseUnreadable>());
+  });
+
   test('empty OCR text → Unreadable', () async {
     final pipeline = ParsePipeline(ocr: _FakeOcr(''), ai: _FakeAi(null));
     expect(await pipeline.parse(image), isA<ParseUnreadable>());
   });
+
+  test(
+    'a real image file is sent to the fallback with its MIME type',
+    () async {
+      final temp = await Directory.systemTemp.createTemp('cbe_pipeline');
+      addTearDown(() => temp.deleteSync(recursive: true));
+      final jpg = File('${temp.path}/receipt.jpg')..writeAsBytesSync([1, 2, 3]);
+
+      final ai = _FakeAi(null);
+      final pipeline = ParsePipeline(ocr: _FakeOcr(''), ai: ai);
+      await pipeline.parse(jpg);
+
+      expect(ai.callCount, 1);
+      expect(ai.sawImage?.mimeType, 'image/jpeg');
+      expect(ai.sawImage?.bytes, [1, 2, 3]);
+    },
+  );
 }

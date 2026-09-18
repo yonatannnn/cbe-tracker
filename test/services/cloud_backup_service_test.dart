@@ -86,7 +86,11 @@ void main() {
     store = ImageStore(docs);
     backup = BackupService(db: db, store: store);
     backend = _FakeBackend(email: 'owner@example.com');
-    cloud = CloudBackupService(backend: backend, backup: backup, settings: db.settingsDao);
+    cloud = CloudBackupService(
+      backend: backend,
+      backup: backup,
+      settings: db.settingsDao,
+    );
   });
 
   tearDown(() async {
@@ -145,7 +149,9 @@ void main() {
       await seedBole(500000);
       await cloud.backupNow(t1);
       // 10 hours later — inside the 20h window.
-      final didRun = await cloud.maybeAutoBackup(t1.add(const Duration(hours: 10)));
+      final didRun = await cloud.maybeAutoBackup(
+        t1.add(const Duration(hours: 10)),
+      );
       expect(didRun, isFalse);
       expect(backend.uploads, 1, reason: 'no second upload');
     });
@@ -153,7 +159,9 @@ void main() {
     test('uploads again once the window has passed', () async {
       await seedBole(500000);
       await cloud.backupNow(t1);
-      final didRun = await cloud.maybeAutoBackup(t1.add(const Duration(hours: 21)));
+      final didRun = await cloud.maybeAutoBackup(
+        t1.add(const Duration(hours: 21)),
+      );
       expect(didRun, isTrue);
       expect(backend.uploads, 2);
     });
@@ -164,13 +172,15 @@ void main() {
       expect(backend.uploads, 0);
     });
 
-    test('swallows an upload failure and leaves the timestamp untouched',
-        () async {
-      await seedBole(500000);
-      backend.failUploads = true;
-      expect(await cloud.maybeAutoBackup(t1), isFalse);
-      expect(await db.settingsDao.getLastCloudBackup(), isNull);
-    });
+    test(
+      'swallows an upload failure and leaves the timestamp untouched',
+      () async {
+        await seedBole(500000);
+        backend.failUploads = true;
+        expect(await cloud.maybeAutoBackup(t1), isFalse);
+        expect(await db.settingsDao.getLastCloudBackup(), isNull);
+      },
+    );
   });
 
   group('restoreLatest', () {

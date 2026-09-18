@@ -317,7 +317,13 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "Couldn't read this screenshot",
+                  switch (_outcome) {
+                    ParseUnreadable(:final aiFailure) => unreadableMessage(
+                      aiFailure,
+                    ),
+                    _ => "Couldn't read this screenshot",
+                  },
+                  textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),

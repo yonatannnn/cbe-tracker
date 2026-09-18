@@ -14,6 +14,7 @@ import 'package:cbe_tracker/data/db/database_provider.dart';
 import 'package:cbe_tracker/data/db/tables.dart';
 import 'package:cbe_tracker/features/bulk_add/bulk_review_modal.dart';
 import 'package:cbe_tracker/services/bulk_processor.dart';
+import 'package:cbe_tracker/services/gemini_fallback_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -121,34 +122,34 @@ void main() {
     expect(find.textContaining("Couldn't read"), findsOneWidget);
   });
 
-  testWidgets('an AI-parsed row starts unchecked; checking it updates the count',
-      (tester) async {
-    await pump(tester, [
-      BulkItem.ok(png, _parsed('FT26OK0001')),
-      BulkItem.okAiParsed(png, _parsed('FT26AI0001')),
-    ]);
+  testWidgets(
+    'an AI-parsed row starts unchecked; checking it updates the count',
+    (tester) async {
+      await pump(tester, [
+        BulkItem.ok(png, _parsed('FT26OK0001')),
+        BulkItem.okAiParsed(png, _parsed('FT26AI0001')),
+      ]);
 
-    // §FR-3: trust the local parser, make the human vouch for the AI.
-    expect(find.text('Approve 1 transaction'), findsOneWidget);
+      // §FR-3: trust the local parser, make the human vouch for the AI.
+      expect(find.text('Approve 1 transaction'), findsOneWidget);
 
-    // Two checkboxes; the AI row's is the unchecked one.
-    final boxes = find.byType(Checkbox);
-    expect(boxes, findsNWidgets(2));
-    final unchecked = tester
-        .widgetList<Checkbox>(boxes)
-        .toList()
-        .indexWhere((c) => c.value == false);
-    expect(unchecked, isNot(-1));
-    await tester.tap(boxes.at(unchecked));
-    await tester.pumpAndSettle();
+      // Two checkboxes; the AI row's is the unchecked one.
+      final boxes = find.byType(Checkbox);
+      expect(boxes, findsNWidgets(2));
+      final unchecked = tester
+          .widgetList<Checkbox>(boxes)
+          .toList()
+          .indexWhere((c) => c.value == false);
+      expect(unchecked, isNot(-1));
+      await tester.tap(boxes.at(unchecked));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Approve 2 transactions'), findsOneWidget);
-  });
+      expect(find.text('Approve 2 transactions'), findsOneWidget);
+    },
+  );
 
   testWidgets('unchecking every row disables the save button', (tester) async {
-    await pump(tester, [
-      BulkItem.ok(png, _parsed('FT26OK0001')),
-    ]);
+    await pump(tester, [BulkItem.ok(png, _parsed('FT26OK0001'))]);
     expect(find.text('Approve 1 transaction'), findsOneWidget);
 
     await tester.tap(find.byType(Checkbox).first);
@@ -161,7 +162,11 @@ void main() {
         matching: find.byType(FilledButton),
       ),
     );
-    expect(button.onPressed, isNull, reason: 'nothing checked → nothing to save');
+    expect(
+      button.onPressed,
+      isNull,
+      reason: 'nothing checked → nothing to save',
+    );
   });
 
   testWidgets('a repeat inside the batch names the screenshot it copies', (
@@ -178,5 +183,16 @@ void main() {
     // Only the two distinct receipts are approvable.
     expect(find.text('Approve 2 transactions'), findsOneWidget);
     expect(find.byType(Checkbox), findsNWidgets(2));
+  });
+
+  testWidgets('a row the AI could not reach says so, not "couldn\'t read"', (
+    tester,
+  ) async {
+    await pump(tester, [
+      BulkItem.failed(png, 'Awash 4500 ETB', aiFailure: AiFailure.quota),
+      BulkItem.failed(png, 'garbled'),
+    ]);
+    expect(find.textContaining('AI reading limit reached'), findsOneWidget);
+    expect(find.textContaining("Couldn't read this picture"), findsOneWidget);
   });
 }

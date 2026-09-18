@@ -366,42 +366,50 @@ void main() {
     });
   });
 
-
   group('TransactionDao — period-scoped movement (dashboard windows)', () {
     // A ledger spanning three days, one branch, so the windows are easy to
     // reason about: +100 on the 10th, −40 on the 14th, +30 on the 15th.
     Future<int> seed() async {
       final branch = await db.branchDao.createBranch('Main');
-      await db.transactionDao.insertIfNew(txn(
-        branchId: branch,
-        amountCents: 10000,
-        reference: 'R-10TH',
-        date: DateTime(2026, 7, 10, 9),
-      ));
-      await db.transactionDao.insertIfNew(txn(
-        branchId: branch,
-        amountCents: 4000,
-        type: TxType.debit,
-        reference: 'R-14TH',
-        date: DateTime(2026, 7, 14, 12),
-      ));
-      await db.transactionDao.insertIfNew(txn(
-        branchId: branch,
-        amountCents: 3000,
-        reference: 'R-15TH',
-        date: DateTime(2026, 7, 15, 8),
-      ));
+      await db.transactionDao.insertIfNew(
+        txn(
+          branchId: branch,
+          amountCents: 10000,
+          reference: 'R-10TH',
+          date: DateTime(2026, 7, 10, 9),
+        ),
+      );
+      await db.transactionDao.insertIfNew(
+        txn(
+          branchId: branch,
+          amountCents: 4000,
+          type: TxType.debit,
+          reference: 'R-14TH',
+          date: DateTime(2026, 7, 14, 12),
+        ),
+      );
+      await db.transactionDao.insertIfNew(
+        txn(
+          branchId: branch,
+          amountCents: 3000,
+          reference: 'R-15TH',
+          date: DateTime(2026, 7, 15, 8),
+        ),
+      );
       return branch;
     }
 
-    test('null bounds sum the whole ledger — movement equals balance', () async {
-      await seed();
-      // 10000 − 4000 + 3000 = 9000.
-      expect(
-        await db.transactionDao.watchDeltaCentsInRange(null, null).first,
-        9000,
-      );
-    });
+    test(
+      'null bounds sum the whole ledger — movement equals balance',
+      () async {
+        await seed();
+        // 10000 − 4000 + 3000 = 9000.
+        expect(
+          await db.transactionDao.watchDeltaCentsInRange(null, null).first,
+          9000,
+        );
+      },
+    );
 
     test('a single day counts only that day, boundary exclusive', () async {
       await seed();
@@ -467,28 +475,35 @@ void main() {
       );
     });
 
-    test('an archived branch is excluded from the all-branches delta', () async {
-      final active = await db.branchDao.createBranch('Active');
-      final archived = await db.branchDao.createBranch('Archived');
-      await db.transactionDao.insertIfNew(txn(
-        branchId: active,
-        amountCents: 5000,
-        reference: 'R-ACTIVE',
-        date: DateTime(2026, 7, 15, 8),
-      ));
-      await db.transactionDao.insertIfNew(txn(
-        branchId: archived,
-        amountCents: 9999,
-        reference: 'R-ARCHIVED',
-        date: DateTime(2026, 7, 15, 8),
-      ));
-      await db.branchDao.archiveBranch(archived);
+    test(
+      'an archived branch is excluded from the all-branches delta',
+      () async {
+        final active = await db.branchDao.createBranch('Active');
+        final archived = await db.branchDao.createBranch('Archived');
+        await db.transactionDao.insertIfNew(
+          txn(
+            branchId: active,
+            amountCents: 5000,
+            reference: 'R-ACTIVE',
+            date: DateTime(2026, 7, 15, 8),
+          ),
+        );
+        await db.transactionDao.insertIfNew(
+          txn(
+            branchId: archived,
+            amountCents: 9999,
+            reference: 'R-ARCHIVED',
+            date: DateTime(2026, 7, 15, 8),
+          ),
+        );
+        await db.branchDao.archiveBranch(archived);
 
-      expect(
-        await db.transactionDao.watchDeltaCentsInRange(null, null).first,
-        5000,
-        reason: "the archived branch's 9999 must not count",
-      );
-    });
+        expect(
+          await db.transactionDao.watchDeltaCentsInRange(null, null).first,
+          5000,
+          reason: "the archived branch's 9999 must not count",
+        );
+      },
+    );
   });
 }

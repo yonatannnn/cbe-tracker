@@ -53,12 +53,14 @@ void main() {
       expect(await landed.readAsBytes(), [9, 8, 7]);
     });
 
-    test('leaves the original alone — the cache copy is the OS\'s to delete',
-        () async {
-      final source = await pickedImage();
-      await store.save(source);
-      expect(source.existsSync(), isTrue);
-    });
+    test(
+      'leaves the original alone — the cache copy is the OS\'s to delete',
+      () async {
+        final source = await pickedImage();
+        await store.save(source);
+        expect(source.existsSync(), isTrue);
+      },
+    );
 
     test('two images with the same filename both survive', () async {
       // image_picker reuses names like "image_picker1234.jpg"; a collision
@@ -90,13 +92,15 @@ void main() {
       expect(store.resolve(stored)!.path, '${docs.path}/$stored');
     });
 
-    test('resolves against wherever the app lives now, not where it was',
-        () async {
-      final stored = await store.save(await pickedImage());
-      // Simulates the restore/reinstall case: same relative path, new sandbox.
-      final elsewhere = ImageStore(Directory('/new/sandbox'));
-      expect(elsewhere.resolve(stored)!.path, '/new/sandbox/$stored');
-    });
+    test(
+      'resolves against wherever the app lives now, not where it was',
+      () async {
+        final stored = await store.save(await pickedImage());
+        // Simulates the restore/reinstall case: same relative path, new sandbox.
+        final elsewhere = ImageStore(Directory('/new/sandbox'));
+        expect(elsewhere.resolve(stored)!.path, '/new/sandbox/$stored');
+      },
+    );
 
     test('a legacy absolute path is passed through', () {
       // Rows written before ImageStore existed hold a cache path; they should
@@ -120,17 +124,19 @@ void main() {
     tearDown(() => db.close());
 
     Future<int> insertTx(String? path, {String reference = 'FT26195XKQ8T'}) {
-      return db.transactionDao.insertIfNew(
-        TransactionsCompanion.insert(
-          branchId: 1,
-          amountCents: 1000,
-          type: TxType.credit,
-          reference: reference,
-          source: TxSource.screenshot,
-          transactionDate: DateTime(2026, 7, 14),
-          screenshotPath: Value(path),
-        ),
-      ).then((_) => 0);
+      return db.transactionDao
+          .insertIfNew(
+            TransactionsCompanion.insert(
+              branchId: 1,
+              amountCents: 1000,
+              type: TxType.credit,
+              reference: reference,
+              source: TxSource.screenshot,
+              transactionDate: DateTime(2026, 7, 14),
+              screenshotPath: Value(path),
+            ),
+          )
+          .then((_) => 0);
     }
 
     Future<List<Transaction>> allTx() => db.select(db.transactions).get();
@@ -150,8 +156,7 @@ void main() {
       expect(await File('${docs.path}/$path').readAsBytes(), [9, 8, 7]);
     });
 
-    test('a cached image the OS already purged clears the dead path',
-        () async {
+    test('a cached image the OS already purged clears the dead path', () async {
       // Showing a broken-image box forever is worse than admitting it's gone.
       await insertTx('${cache.path}/purged.jpg');
 
@@ -165,7 +170,10 @@ void main() {
       await insertTx('screenshots/already-safe.jpg');
       final result = await ImageMigration(db: db, store: store).run();
       expect(result, (rescued: 0, lost: 0));
-      expect((await allTx()).single.screenshotPath, 'screenshots/already-safe.jpg');
+      expect(
+        (await allTx()).single.screenshotPath,
+        'screenshots/already-safe.jpg',
+      );
     });
 
     test('rows with no image are ignored', () async {
@@ -187,7 +195,10 @@ void main() {
     });
 
     test('a mixed ledger reports both counts', () async {
-      await insertTx((await pickedImage('a.jpg')).path, reference: 'FT26195AAA1A');
+      await insertTx(
+        (await pickedImage('a.jpg')).path,
+        reference: 'FT26195AAA1A',
+      );
       await insertTx('${cache.path}/purged.jpg', reference: 'FT26195BBB2B');
       await insertTx(null, reference: 'FT26195CCC3C');
       await insertTx('screenshots/safe.jpg', reference: 'FT26195DDD4D');

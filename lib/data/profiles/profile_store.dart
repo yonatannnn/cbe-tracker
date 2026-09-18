@@ -137,9 +137,8 @@ class ProfileStore {
   }
 
   /// The absolute directory a profile's data lives in.
-  Directory directoryOf(Profile profile) => profile.isRoot
-      ? rootDir
-      : Directory('${rootDir.path}/${profile.dir}');
+  Directory directoryOf(Profile profile) =>
+      profile.isRoot ? rootDir : Directory('${rootDir.path}/${profile.dir}');
 
   /// Signs in as [name]: switches to the existing profile with that name, or
   /// creates one. The first profile ever created takes the root directory so

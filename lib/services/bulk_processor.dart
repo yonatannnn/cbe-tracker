@@ -13,6 +13,7 @@ import 'dart:io';
 import '../core/parser/cbe_parser.dart';
 import '../data/db/daos/transaction_dao.dart';
 import '../data/db/database.dart';
+import 'gemini_fallback_service.dart' show AiFailure;
 import 'parse_pipeline.dart';
 
 /// Outcome for one image in the batch.
@@ -39,24 +40,28 @@ class BulkItem {
     this.existing,
     this.duplicateOf,
     this.rawText,
+    this.aiFailure,
   });
 
   BulkItem.ok(this.image, ParsedCbeMessage this.parsed)
     : status = BulkStatus.ok,
       existing = null,
       duplicateOf = null,
-      rawText = null;
+      rawText = null,
+      aiFailure = null;
 
   BulkItem.okAiParsed(this.image, ParsedCbeMessage this.parsed)
     : status = BulkStatus.okAiParsed,
       existing = null,
       duplicateOf = null,
-      rawText = null;
+      rawText = null,
+      aiFailure = null;
 
   BulkItem.duplicate(this.image, this.parsed, Transaction this.existing)
     : status = BulkStatus.duplicate,
       duplicateOf = null,
-      rawText = null;
+      rawText = null,
+      aiFailure = null;
 
   /// The same receipt was already in THIS batch, at 1-based [duplicateOf].
   /// Saving it too would collide on the UNIQUE reference and fail the whole
@@ -64,9 +69,10 @@ class BulkItem {
   BulkItem.duplicateInBatch(this.image, this.parsed, int this.duplicateOf)
     : status = BulkStatus.duplicate,
       existing = null,
-      rawText = null;
+      rawText = null,
+      aiFailure = null;
 
-  BulkItem.failed(this.image, this.rawText)
+  BulkItem.failed(this.image, this.rawText, {this.aiFailure})
     : status = BulkStatus.failed,
       parsed = null,
       existing = null,
@@ -88,6 +94,9 @@ class BulkItem {
 
   /// Whatever OCR read, when the parse failed. May be empty.
   final String? rawText;
+
+  /// Why the AI fallback could not help a failed row, if that is the story.
+  final AiFailure? aiFailure;
 }
 
 /// Progress snapshot: "[current] of [total]" plus everything finished so far.
@@ -150,8 +159,8 @@ class BulkProcessor {
     final outcome = await pipeline.parse(image);
 
     switch (outcome) {
-      case ParseUnreadable(:final rawText):
-        return BulkItem.failed(image, rawText);
+      case ParseUnreadable(:final rawText, :final aiFailure):
+        return BulkItem.failed(image, rawText, aiFailure: aiFailure);
 
       case ParseSuccess(:final parsed):
         final reference = parsed.reference;

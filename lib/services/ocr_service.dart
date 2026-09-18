@@ -79,9 +79,7 @@ class MlKitOcrService implements OcrService {
         targetHeight: (height * scale).round(),
       );
       final frame = await codec.getNextFrame();
-      final data = await frame.image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
+      final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
       frame.image.dispose();
       codec.dispose();
       descriptor.dispose();

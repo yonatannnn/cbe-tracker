@@ -22,13 +22,16 @@ void main() {
     expect(registry.active, isNull);
   });
 
-  test('the first user adopts the root, so pre-profile books are kept', () async {
-    final registry = await store.enter(const ProfileRegistry(), 'Almaz');
-    final almaz = registry.active!;
-    expect(almaz.name, 'Almaz');
-    expect(almaz.isRoot, isTrue);
-    expect(store.directoryOf(almaz).path, root.path);
-  });
+  test(
+    'the first user adopts the root, so pre-profile books are kept',
+    () async {
+      final registry = await store.enter(const ProfileRegistry(), 'Almaz');
+      final almaz = registry.active!;
+      expect(almaz.name, 'Almaz');
+      expect(almaz.isRoot, isTrue);
+      expect(store.directoryOf(almaz).path, root.path);
+    },
+  );
 
   test('a second user gets a folder of her own', () async {
     var registry = await store.enter(const ProfileRegistry(), 'Almaz');

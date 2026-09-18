@@ -67,54 +67,60 @@ void main() {
     dao: db.transactionDao,
   );
 
-  test('10 images → correct statuses, no DB writes during processing', () async {
-    final branch = await db.branchDao.createBranch('Main');
-    // One reference already recorded, so image 3 must come back a duplicate.
-    await db.transactionDao.insertIfNew(
-      TransactionsCompanion.insert(
-        branchId: branch,
-        amountCents: 500000,
-        type: TxType.credit,
-        reference: 'FTEXISTING01',
-        source: TxSource.screenshot,
-        transactionDate: DateTime(2026, 7, 13, 9, 0),
-      ),
-    );
-    final rowsBefore = (await db.select(db.transactions).get()).length;
+  test(
+    '10 images → correct statuses, no DB writes during processing',
+    () async {
+      final branch = await db.branchDao.createBranch('Main');
+      // One reference already recorded, so image 3 must come back a duplicate.
+      await db.transactionDao.insertIfNew(
+        TransactionsCompanion.insert(
+          branchId: branch,
+          amountCents: 500000,
+          type: TxType.credit,
+          reference: 'FTEXISTING01',
+          source: TxSource.screenshot,
+          transactionDate: DateTime(2026, 7, 13, 9, 0),
+        ),
+      );
+      final rowsBefore = (await db.select(db.transactions).get()).length;
 
-    final script = <String, ParseOutcome>{
-      for (var i = 1; i <= 10; i++)
-        'img$i.png': switch (i) {
-          3 => ParseSuccess(parsed(reference: 'FTEXISTING01')), // duplicate
-          5 => ParseSuccess(
-            parsed(reference: 'FTAI00000001', confidence: Confidence.aiParsed),
-          ),
-          7 => const ParseUnreadable('blurry'),
-          _ => ParseSuccess(parsed(reference: 'FTOK$i')),
-        },
-    };
-    final images = [for (var i = 1; i <= 10; i++) File('img$i.png')];
+      final script = <String, ParseOutcome>{
+        for (var i = 1; i <= 10; i++)
+          'img$i.png': switch (i) {
+            3 => ParseSuccess(parsed(reference: 'FTEXISTING01')), // duplicate
+            5 => ParseSuccess(
+              parsed(
+                reference: 'FTAI00000001',
+                confidence: Confidence.aiParsed,
+              ),
+            ),
+            7 => const ParseUnreadable('blurry'),
+            _ => ParseSuccess(parsed(reference: 'FTOK$i')),
+          },
+      };
+      final images = [for (var i = 1; i <= 10; i++) File('img$i.png')];
 
-    final progress = await processorFor(script).process(images).toList();
+      final progress = await processorFor(script).process(images).toList();
 
-    final items = progress.last.resultsSoFar;
-    expect(items, hasLength(10));
-    expect(items[2].status, BulkStatus.duplicate);
-    expect(items[2].existing, isNotNull, reason: 'needs the recorded date');
-    expect(items[2].existing!.transactionDate, DateTime(2026, 7, 13, 9, 0));
-    expect(items[4].status, BulkStatus.okAiParsed);
-    expect(items[6].status, BulkStatus.failed);
-    expect(items[6].rawText, 'blurry');
-    expect(items[0].status, BulkStatus.ok);
-    expect(items[9].status, BulkStatus.ok);
+      final items = progress.last.resultsSoFar;
+      expect(items, hasLength(10));
+      expect(items[2].status, BulkStatus.duplicate);
+      expect(items[2].existing, isNotNull, reason: 'needs the recorded date');
+      expect(items[2].existing!.transactionDate, DateTime(2026, 7, 13, 9, 0));
+      expect(items[4].status, BulkStatus.okAiParsed);
+      expect(items[6].status, BulkStatus.failed);
+      expect(items[6].rawText, 'blurry');
+      expect(items[0].status, BulkStatus.ok);
+      expect(items[9].status, BulkStatus.ok);
 
-    // The whole point: processing is a dry run.
-    expect(
-      (await db.select(db.transactions).get()).length,
-      rowsBefore,
-      reason: 'BulkProcessor must not write anything',
-    );
-  });
+      // The whole point: processing is a dry run.
+      expect(
+        (await db.select(db.transactions).get()).length,
+        rowsBefore,
+        reason: 'BulkProcessor must not write anything',
+      );
+    },
+  );
 
   test('emits progress 1..N in order, with results accumulating', () async {
     final script = <String, ParseOutcome>{
@@ -146,9 +152,9 @@ void main() {
     final pipeline = _ScriptedPipeline(script);
     final processor = BulkProcessor(pipeline: pipeline, dao: db.transactionDao);
 
-    await processor
-        .process([for (var i = 1; i <= 5; i++) File('img$i.png')])
-        .toList();
+    await processor.process([
+      for (var i = 1; i <= 5; i++) File('img$i.png'),
+    ]).toList();
 
     expect(pipeline.maxConcurrent, 1, reason: 'ML Kit must not run 5 at once');
     expect(pipeline.calls, [
@@ -170,9 +176,9 @@ void main() {
     final pipeline = _ScriptedPipeline(script);
     final processor = BulkProcessor(pipeline: pipeline, dao: db.transactionDao);
 
-    final progress = await processor
-        .process([for (var i = 1; i <= over; i++) File('img$i.png')])
-        .toList();
+    final progress = await processor.process([
+      for (var i = 1; i <= over; i++) File('img$i.png'),
+    ]).toList();
 
     expect(progress, hasLength(BulkProcessor.maxImages));
     expect(progress.last.total, BulkProcessor.maxImages);
@@ -198,7 +204,9 @@ void main() {
       ),
     };
 
-    final progress = await processorFor(script).process([File('img1.png')]).toList();
+    final progress = await processorFor(
+      script,
+    ).process([File('img1.png')]).toList();
 
     expect(progress.single.resultsSoFar.single.status, BulkStatus.okAiParsed);
   });
@@ -215,7 +223,9 @@ void main() {
       'c.png': ParseSuccess(parsed(reference: 'FT26196FZHT2', cents: 100)),
       'd.png': ParseSuccess(parsed(reference: 'FT26196FZHT2', cents: 100)),
     };
-    final images = [for (final n in ['a', 'b', 'c', 'd']) File('$n.png')];
+    final images = [
+      for (final n in ['a', 'b', 'c', 'd']) File('$n.png'),
+    ];
 
     final progress = await processorFor(script).process(images).toList();
     final items = progress.last.resultsSoFar;

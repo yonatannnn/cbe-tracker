@@ -87,19 +87,31 @@ void main() {
     );
 
     test('12-hour AM/PM conversion', () {
-      expect(parseWithDate('on Jul 15, 2026 11:45 AM').date,
-          DateTime(2026, 7, 15, 11, 45));
-      expect(parseWithDate('on Jul 15, 2026 1:05 PM').date,
-          DateTime(2026, 7, 15, 13, 5));
-      expect(parseWithDate('on Jan 1, 2026 12:00 AM').date,
-          DateTime(2026, 1, 1, 0, 0), reason: 'midnight is 00:00');
-      expect(parseWithDate('on Dec 31, 2026 12:30 PM').date,
-          DateTime(2026, 12, 31, 12, 30), reason: 'noon stays 12');
+      expect(
+        parseWithDate('on Jul 15, 2026 11:45 AM').date,
+        DateTime(2026, 7, 15, 11, 45),
+      );
+      expect(
+        parseWithDate('on Jul 15, 2026 1:05 PM').date,
+        DateTime(2026, 7, 15, 13, 5),
+      );
+      expect(
+        parseWithDate('on Jan 1, 2026 12:00 AM').date,
+        DateTime(2026, 1, 1, 0, 0),
+        reason: 'midnight is 00:00',
+      );
+      expect(
+        parseWithDate('on Dec 31, 2026 12:30 PM').date,
+        DateTime(2026, 12, 31, 12, 30),
+        reason: 'noon stays 12',
+      );
     });
 
     test('the SMS slash format still works', () {
-      expect(parseWithDate('on 14/07/2026 at 10:42').date,
-          DateTime(2026, 7, 14, 10, 42));
+      expect(
+        parseWithDate('on 14/07/2026 at 10:42').date,
+        DateTime(2026, 7, 14, 10, 42),
+      );
     });
 
     test('an unknown date shape leaves date null (LOW, never a guess)', () {
@@ -147,10 +159,9 @@ void main() {
     test('every file in core/parser/ is pure Dart (no Flutter imports)', () {
       // CLAUDE.md: the CBE parser stays pure Dart — no Flutter imports in
       // core/parser/. Scans the whole directory so new files can't drift.
-      final files = Directory('lib/core/parser')
-          .listSync()
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'));
+      final files = Directory(
+        'lib/core/parser',
+      ).listSync().whereType<File>().where((f) => f.path.endsWith('.dart'));
 
       expect(files, isNotEmpty);
       for (final file in files) {

@@ -124,7 +124,9 @@ requests no SMS permission. Screenshots are the only source of transactions.
 
 ### LLM fallback (Gemini Flash)
 - Triggered ONLY when local parse throws or returns LOW confidence, AND
-  device is online. Input is OCR text, never the image.
+  device is online. Input is the OCR text plus the screenshot itself (since
+  September 2026), so photos of phone screens and other banks' receipts can
+  be read; the local gates still apply, and every AI result is user-checked.
 - Structured JSON output; response validated by three gates: amount
   appears verbatim in raw text, type keyword present, reference matches
   FT format and appears in text. Any gate fails → couldn't-read state.

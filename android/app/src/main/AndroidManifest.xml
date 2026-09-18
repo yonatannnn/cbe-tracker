@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Gemini fallback and optional cloud backup also run in release builds. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="CBE Tracker"
         android:name="${applicationName}"

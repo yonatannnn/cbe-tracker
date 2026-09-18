@@ -54,7 +54,11 @@ void main() {
       final state = ReviewState.initial([ok(), ai(), dup(), failed()]);
 
       expect(state.rows[0].checked, isTrue, reason: 'ok');
-      expect(state.rows[1].checked, isFalse, reason: 'aiParsed must be looked at');
+      expect(
+        state.rows[1].checked,
+        isFalse,
+        reason: 'aiParsed must be looked at',
+      );
       expect(state.rows[2].checked, isFalse, reason: 'duplicate');
       expect(state.rows[3].checked, isFalse, reason: 'failed');
     });
@@ -73,7 +77,11 @@ void main() {
 
     test('only ai and failed rows are editable', () {
       final state = ReviewState.initial([ok(), ai(), dup(), failed()]);
-      expect(state.rows[0].isEditable, isFalse, reason: 'clean parse: read-only');
+      expect(
+        state.rows[0].isEditable,
+        isFalse,
+        reason: 'clean parse: read-only',
+      );
       expect(state.rows[1].isEditable, isTrue);
       expect(state.rows[2].isEditable, isFalse);
       expect(state.rows[3].isEditable, isTrue);

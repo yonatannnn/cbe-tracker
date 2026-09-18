@@ -23,6 +23,8 @@ class ParsedCbeMessage {
     required this.date,
     required this.confidence,
     required this.rawText,
+    this.bank,
+    this.counterparty,
   });
 
   /// Money is integer cents everywhere — never double arithmetic (CLAUDE.md).
@@ -38,6 +40,13 @@ class ParsedCbeMessage {
 
   /// The original, unmodified input (fed to the LLM fallback when needed).
   final String rawText;
+
+  /// Which bank issued the receipt, when the AI fallback read it ("Awash
+  /// Bank"). Null for the local CBE parser — it only knows CBE.
+  final String? bank;
+
+  /// Who the money came from (credit) or went to (debit), when read.
+  final String? counterparty;
 }
 
 /// Thrown when the text cannot be parsed with confidence — specifically when

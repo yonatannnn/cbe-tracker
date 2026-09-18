@@ -85,9 +85,7 @@ void main() {
   group('round trip (§9 — the disaster-recovery path)', () {
     test('export → wipe → import restores books and images exactly', () async {
       await seed();
-      final balanceBefore = await db.transactionDao
-          .watchBalanceCents(1)
-          .first;
+      final balanceBefore = await db.transactionDao.watchBalanceCents(1).first;
       expect(balanceBefore, 380000);
 
       final zip = await backup.export();
@@ -121,19 +119,21 @@ void main() {
       db = restored;
     });
 
-    test('inspect reports what a restore would bring, without applying it',
-        () async {
-      await seed();
-      final zip = await backup.export();
+    test(
+      'inspect reports what a restore would bring, without applying it',
+      () async {
+        await seed();
+        final zip = await backup.export();
 
-      final summary = await backup.inspect(zip);
-      expect(summary.branches, 2);
-      expect(summary.transactions, 2);
-      expect(summary.images, 1);
+        final summary = await backup.inspect(zip);
+        expect(summary.branches, 2);
+        expect(summary.transactions, 2);
+        expect(summary.images, 1);
 
-      // Nothing was touched.
-      expect(await db.transactionDao.watchBalanceCents(1).first, 380000);
-    });
+        // Nothing was touched.
+        expect(await db.transactionDao.watchBalanceCents(1).first, 380000);
+      },
+    );
   });
 
   group('bad input is refused, not half-applied', () {
@@ -156,34 +156,43 @@ void main() {
       expect(() => backup.inspect(wrongZip()), throwsA(isA<BackupException>()));
     });
 
-    test('restoring the wrong zip leaves the books exactly as they were',
-        () async {
-      // The one destructive action in the app. If it refuses, it must refuse
-      // BEFORE touching anything — a half-applied restore loses real money.
-      await seed();
+    test(
+      'restoring the wrong zip leaves the books exactly as they were',
+      () async {
+        // The one destructive action in the app. If it refuses, it must refuse
+        // BEFORE touching anything — a half-applied restore loses real money.
+        await seed();
 
-      await expectLater(
-        backup.restore(wrongZip()),
-        throwsA(isA<BackupException>()),
-      );
+        await expectLater(
+          backup.restore(wrongZip()),
+          throwsA(isA<BackupException>()),
+        );
 
-      expect(await db.transactionDao.watchBalanceCents(1).first, 380000);
-      expect(
-        File('${docs.path}/${ImageStore.subdirectory}/photo.jpg').existsSync(),
-        isTrue,
-      );
-    });
+        expect(await db.transactionDao.watchBalanceCents(1).first, 380000);
+        expect(
+          File(
+            '${docs.path}/${ImageStore.subdirectory}/photo.jpg',
+          ).existsSync(),
+          isTrue,
+        );
+      },
+    );
 
-    test('restoring a corrupt file leaves the books exactly as they were',
-        () async {
-      await seed();
-      final junk = File('${docs.path}/corrupt.zip');
-      await junk.writeAsString('not a zip at all');
+    test(
+      'restoring a corrupt file leaves the books exactly as they were',
+      () async {
+        await seed();
+        final junk = File('${docs.path}/corrupt.zip');
+        await junk.writeAsString('not a zip at all');
 
-      await expectLater(backup.restore(junk), throwsA(isA<BackupException>()));
+        await expectLater(
+          backup.restore(junk),
+          throwsA(isA<BackupException>()),
+        );
 
-      expect(await db.transactionDao.watchBalanceCents(1).first, 380000);
-    });
+        expect(await db.transactionDao.watchBalanceCents(1).first, 380000);
+      },
+    );
   });
 
   group('restore swaps the database file atomically', () {
@@ -194,8 +203,10 @@ void main() {
 
       // A leftover .incoming would mean the rename never happened — the books
       // would look restored while the real file was untouched.
-      expect(File('${docs.path}/cbe_tracker.sqlite.incoming').existsSync(),
-          isFalse);
+      expect(
+        File('${docs.path}/cbe_tracker.sqlite.incoming').existsSync(),
+        isFalse,
+      );
 
       db = AppDatabase.forTesting(
         NativeDatabase(File('${docs.path}/cbe_tracker.sqlite')),
@@ -208,13 +219,16 @@ void main() {
       final zip = await backup.export();
       // A journal left by a crash would be replayed onto the restored file and
       // corrupt it.
-      await File('${docs.path}/cbe_tracker.sqlite-journal')
-          .writeAsBytes([0, 1, 2]);
+      await File(
+        '${docs.path}/cbe_tracker.sqlite-journal',
+      ).writeAsBytes([0, 1, 2]);
 
       await backup.restore(zip);
 
-      expect(File('${docs.path}/cbe_tracker.sqlite-journal').existsSync(),
-          isFalse);
+      expect(
+        File('${docs.path}/cbe_tracker.sqlite-journal').existsSync(),
+        isFalse,
+      );
 
       db = AppDatabase.forTesting(
         NativeDatabase(File('${docs.path}/cbe_tracker.sqlite')),
@@ -234,12 +248,14 @@ void main() {
       expect(summary.images, 0);
     });
 
-    test('filename carries the date so backups sort and never collide',
-        () async {
-      await db.branchDao.createBranch('Bole');
-      final zip = await backup.export();
-      expect(zip.uri.pathSegments.last, startsWith('CBETracker_backup_'));
-      expect(zip.uri.pathSegments.last, endsWith('.zip'));
-    });
+    test(
+      'filename carries the date so backups sort and never collide',
+      () async {
+        await db.branchDao.createBranch('Bole');
+        final zip = await backup.export();
+        expect(zip.uri.pathSegments.last, startsWith('CBETracker_backup_'));
+        expect(zip.uri.pathSegments.last, endsWith('.zip'));
+      },
+    );
   });
 }

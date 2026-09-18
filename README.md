@@ -32,6 +32,34 @@ flutter build apk --release \
   --dart-define=SUPABASE_KEY=YOUR-PUBLISHABLE-KEY
 ```
 
+### Enable Gemini extraction fallback
+
+Copy `secrets.example.json` to `secrets.json` (gitignored), then replace
+`paste-your-key-here` with your Gemini API key from
+[Google AI Studio](https://aistudio.google.com/apikey).
+
+```sh
+flutter run --dart-define-from-file=secrets.json
+# Or build an installable APK:
+flutter build apk --release --dart-define-from-file=secrets.json
+```
+
+Rebuild after changing the key; hot reload cannot update build-time values.
+The key is embedded in the app, so this setup is intended for the personal
+single-client build.
+
+Both single and bulk screenshot uploads try the local regex parser first.
+Only a failed or low-confidence parse goes to Gemini, and that request
+carries the OCR text AND the picture itself — a photo of a phone screen, or a
+receipt from another bank (Awash, Telebirr, …), is exactly what OCR text alone
+cannot carry. The fallback requests structured JSON. A CBE receipt is still
+validated against the text (amount beside its credit/debit wording, no balance
+figures, a real FT reference); another bank's receipt must show an amount the
+OCR also read, and gets a reference derived from bank + time + amount so a
+re-upload is caught as a duplicate. Accepted results are marked AI-parsed:
+bulk AI rows start unchecked and require review. Missing keys, network errors,
+invalid responses, and the 45-second timeout lead to manual entry.
+
 ### Release signing
 
 `android/app/build.gradle.kts` still signs release builds with the debug key

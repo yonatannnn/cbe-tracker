@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 /// Design tokens (§8 Phase 0, reworked in Phase 9).
@@ -252,18 +251,14 @@ class AppTheme {
         backgroundColor: AppColors.card,
         selectedColor: AppColors.creditWash,
         side: const BorderSide(color: AppColors.line),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(9),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
         labelStyle: const TextStyle(fontSize: 13, color: AppColors.ink),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.ink,
         contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }

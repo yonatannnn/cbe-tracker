@@ -7,3 +7,11 @@
 -dontwarn com.google.mlkit.vision.text.devanagari.**
 -dontwarn com.google.mlkit.vision.text.japanese.**
 -dontwarn com.google.mlkit.vision.text.korean.**
+
+# ML Kit discovers registrars by class name and invokes their no-argument
+# constructors reflectively. R8 full mode otherwise strips those constructors,
+# leaving OCR unable to initialize in release builds.
+# https://developer.android.com/topic/performance/app-optimization/full-mode
+-keep class com.google.mlkit.** implements com.google.firebase.components.ComponentRegistrar {
+    public <init>();
+}

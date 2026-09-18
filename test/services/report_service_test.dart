@@ -84,18 +84,21 @@ void main() {
       expect(after.totalCount, b.totalCount);
     });
 
-    test('backdating into day 1 DOES change day 2 opening — correctly', () async {
-      await addTx(reference: 'FTD2A', date: DateTime(2026, 7, 14, 9, 0));
-      expect(boleIn(await reports.dailyReport(day2)).summary.openingCents, 0);
+    test(
+      'backdating into day 1 DOES change day 2 opening — correctly',
+      () async {
+        await addTx(reference: 'FTD2A', date: DateTime(2026, 7, 14, 9, 0));
+        expect(boleIn(await reports.dailyReport(day2)).summary.openingCents, 0);
 
-      // A screenshot from day 1 added late is real history; day 2's opening
-      // must reflect it. Recomputation is the point.
-      await addTx(reference: 'FTD1LATE', date: DateTime(2026, 7, 13, 9, 0));
-      expect(
-        boleIn(await reports.dailyReport(day2)).summary.openingCents,
-        100000,
-      );
-    });
+        // A screenshot from day 1 added late is real history; day 2's opening
+        // must reflect it. Recomputation is the point.
+        await addTx(reference: 'FTD1LATE', date: DateTime(2026, 7, 13, 9, 0));
+        expect(
+          boleIn(await reports.dailyReport(day2)).summary.openingCents,
+          100000,
+        );
+      },
+    );
 
     test('regenerating the same day twice gives identical numbers', () async {
       await addTx(reference: 'FTD2A', date: DateTime(2026, 7, 14, 9, 0));
@@ -107,17 +110,19 @@ void main() {
       expect(second.transactions.length, first.transactions.length);
     });
 
-    test('a day with no activity still reports, with a carried opening',
-        () async {
-      await addTx(reference: 'FTD1A', date: DateTime(2026, 7, 13, 9, 0));
+    test(
+      'a day with no activity still reports, with a carried opening',
+      () async {
+        await addTx(reference: 'FTD1A', date: DateTime(2026, 7, 13, 9, 0));
 
-      final b = boleIn(await reports.dailyReport(day2));
-      expect(b.hasTransactions, isFalse);
-      expect(b.summary.openingCents, 100000);
-      expect(b.summary.closingCents, 100000, reason: 'nothing moved');
-      expect(b.totalCount, 0);
-      expect(b.transactions, isEmpty);
-    });
+        final b = boleIn(await reports.dailyReport(day2));
+        expect(b.hasTransactions, isFalse);
+        expect(b.summary.openingCents, 100000);
+        expect(b.summary.closingCents, 100000, reason: 'nothing moved');
+        expect(b.totalCount, 0);
+        expect(b.transactions, isEmpty);
+      },
+    );
   });
 
   group('across branches', () {
@@ -180,7 +185,7 @@ void main() {
 
     test('the day argument is normalized — any time of day works', () async {
       await addTx(reference: 'FTX', date: DateTime(2026, 7, 14, 9, 0));
-      final atNoon = await reports.dailyReport(DateTime(2026, 7, 14, 12, 34), );
+      final atNoon = await reports.dailyReport(DateTime(2026, 7, 14, 12, 34));
       expect(boleIn(atNoon).totalCount, 1);
       expect(atNoon.day, DateTime(2026, 7, 14));
     });
