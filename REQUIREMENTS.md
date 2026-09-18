@@ -184,8 +184,8 @@ reads these layouts, each taken from a real receipt or SMS:
 
 | Source | Shape | Direction |
 |---|---|---|
-| CBE app transfer receipt | "ETB 1,000.00 has been debited from A ETB-4351 for B ETB-7737 on Sep 15, 2026 03:38 PM with transaction ID: FT…" | by her account suffix |
-| CBE USSD *889# | "Completed ETB300.61 transfer From A to B-7737 … on 16/09/2026 FT…" | by her account suffix |
+| CBE app transfer receipt | "ETB 1,000.00 has been debited from A ETB-4351 for B ETB-7737 on Sep 15, 2026 03:38 PM with transaction ID: FT…" | credit (the customer's screen) |
+| CBE USSD *889# | "Completed ETB300.61 transfer From A to B-7737 … on 16/09/2026 FT…" | credit (the customer's screen) |
 | telebirr SMS | "You have received ETB 50.00 from X(…) on 11/09/2026 21:59:18. Your transaction number is DIB6NHE3H2" | credit (HIGH); "transferred" → credit (LOW) |
 | telebirr app | "−5,515.00 (ETB) Transaction Number: … Transaction Time: 2026/09/17 16:37:36 … Bank Name: Commercial Bank of Ethiopia" | credit when the bank is CBE |
 | Awash app (IPS) | "Transaction Time 2026-09-17 03:28:03 PM … Amount 4500 ETB … Sender Name … Beneficiary Bank Commercial…" | credit; reference derived (AWASH-<time>-<cents>) |
@@ -193,13 +193,12 @@ reads these layouts, each taken from a real receipt or SMS:
 | Dashen app | "Transaction Reference: 641OBTS2518100WH Transaction Date: Sep 15, 2026, 3:38:00 pm Transaction Amount: ETB 1,600.00" | credit |
 | Awash / Dashen / Zemen SMS | "your transfer of 500 ETB was successful. View receipt: <link>" | credit (LOW); link token is the reference |
 
-Rules: charges, VAT and fee-inclusive totals are never the amount. Any
-receipt from another bank or wallet is a customer paying her (she banks
-with CBE only). Sender's-screen CBE receipts need Settings → "My CBE account
-ends with" to settle direction; without it, and for every template with a
-gap (no date, no reference, unknown receiving bank), the row comes back at
-LOW confidence: unchecked, editable, with a CHECK badge and its thumbnail.
-A LOW read is kept even when Gemini can't improve on it.
+Rules: charges, VAT and fee-inclusive totals are never the amount. Every
+receipt is a customer paying her — she files no transfers of her own — so
+every template yields a credit. A template with a gap (no date, no
+reference, a receiving bank that is not CBE) comes back at LOW confidence:
+unchecked, editable, with a CHECK badge and its thumbnail. A LOW read is
+kept even when Gemini can't improve on it.
 
 ## 4. Shared CBE parser
 

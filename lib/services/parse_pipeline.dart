@@ -61,19 +61,10 @@ String unreadableMessage(AiFailure? failure) => switch (failure) {
 const bool _logOcr = bool.fromEnvironment('LOG_OCR');
 
 class ParsePipeline {
-  ParsePipeline({
-    required this.ocr,
-    required this.ai,
-    FutureOr<String?> Function()? ownerAccountSuffix,
-  }) : _ownerAccountSuffix = ownerAccountSuffix ?? (() => null);
+  ParsePipeline({required this.ocr, required this.ai});
 
   final OcrService ocr;
   final CbeAiFallback ai;
-
-  /// Her CBE account's last digits, for direction on sender's-screen
-  /// receipts (see receipt_parser.dart). Read fresh on every parse — a
-  /// value captured when the pipeline was built could predate her typing it.
-  final FutureOr<String?> Function() _ownerAccountSuffix;
 
   /// Bounds native OCR initialization and image preparation as well as reading.
   static const Duration ocrTimeout = Duration(seconds: 20);
@@ -125,10 +116,7 @@ class ParsePipeline {
 
     ParsedCbeMessage? low;
     try {
-      final local = parseReceiptText(
-        rawText,
-        ownerAccountSuffix: await _ownerAccountSuffix(),
-      );
+      final local = parseReceiptText(rawText);
       if (local.confidence == Confidence.high) {
         logParseDiagnostic('regex accepted; gemini skipped');
         return ParseSuccess(local);

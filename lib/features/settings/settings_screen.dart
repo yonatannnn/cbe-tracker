@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme.dart';
 import '../../data/db/database_provider.dart';
 import '../../data/profiles/profile_provider.dart';
-import '../../services/service_providers.dart';
 import '../../services/notification_service.dart';
 import '../../services/supabase_config.dart';
 import '../reports/reports_providers.dart';
@@ -21,7 +20,6 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reminder = ref.watch(reminderTimeProvider).value;
-    final ownerSuffix = ref.watch(ownerAccountSuffixProvider).value;
     final registry = ref.watch(profilesProvider);
     final me = registry.active;
     final others = registry.profiles.where((p) => p.id != me?.id).toList();
@@ -59,24 +57,6 @@ class SettingsScreen extends ConsumerWidget {
               subtitle: const Text('Your data stays on this phone'),
               trailing: const Icon(Icons.logout),
               onTap: () => _signOut(context, ref),
-            ),
-            const Divider(),
-            const _SectionHeader('My CBE account'),
-            ListTile(
-              leading: const Icon(Icons.account_balance_outlined),
-              title: const Text('My CBE account ends with'),
-              subtitle: Text(
-                ownerSuffix == null
-                    ? 'Not set — receipts that show both sides of a transfer '
-                          'come back for review'
-                    : 'Confirms a receipt was a payment into …$ownerSuffix; '
-                          'one sent FROM it comes back for review',
-              ),
-              trailing: Text(
-                ownerSuffix == null ? '—' : '…$ownerSuffix',
-                style: theme.textTheme.titleMedium,
-              ),
-              onTap: () => _editOwnerAccount(context, ref, ownerSuffix),
             ),
             const Divider(),
             const _SectionHeader('Branches'),
@@ -151,48 +131,6 @@ class SettingsScreen extends ConsumerWidget {
   ) async {
     await ref.read(profilesProvider.notifier).switchTo(id);
     if (context.mounted) context.go('/home');
-  }
-
-  /// The last four digits as printed on receipts ("ETB-7737", "…-7737").
-  Future<void> _editOwnerAccount(
-    BuildContext context,
-    WidgetRef ref,
-    String? current,
-  ) async {
-    final controller = TextEditingController(text: current ?? '');
-    final value = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('My CBE account ends with'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          maxLength: 4,
-          decoration: const InputDecoration(
-            labelText: 'Last 4 digits',
-            helperText: 'As printed on receipts, e.g. ETB-7737 → 7737',
-          ),
-          onSubmitted: (v) => Navigator.pop(dialogContext, v),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, ''),
-            child: const Text('Clear'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (value == null) return;
-    final digits = value.replaceAll(RegExp(r'\D'), '');
-    await ref
-        .read(settingsDaoProvider)
-        .setOwnerAccountSuffix(digits.isEmpty ? null : digits);
   }
 
   /// Nobody signed in → the router's first gate shows the welcome screen.

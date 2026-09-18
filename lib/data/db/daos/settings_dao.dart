@@ -16,7 +16,6 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
   static const _reminderKey = 'report_reminder_time';
   static const _reminderLastKey = 'report_reminder_time_last';
   static const _cloudBackupKey = 'cloud_last_backup';
-  static const _ownerAccountKey = 'owner_cbe_account_suffix';
 
   Future<String?> _get(String key) async {
     final row = await (select(
@@ -74,25 +73,6 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
 
   /// The time the reminder had before it was last switched off ("HH:mm").
   Future<String?> getLastReminderTime() => _get(_reminderLastKey);
-
-  /// The last digits of her CBE account ("7737"), or null when never set.
-  ///
-  /// Decides direction on receipts that show both sides of a transfer (the
-  /// CBE app receipt, the USSD confirmation): her account as receiver → a
-  /// credit, as sender → a debit. Without it those rows come back for review.
-  Stream<String?> watchOwnerAccountSuffix() {
-    return (select(appSettings)..where((s) => s.key.equals(_ownerAccountKey)))
-        .watchSingleOrNull()
-        .map((row) => row?.value.isEmpty ?? true ? null : row!.value);
-  }
-
-  Future<String?> getOwnerAccountSuffix() async {
-    final raw = await _get(_ownerAccountKey);
-    return raw == null || raw.isEmpty ? null : raw;
-  }
-
-  Future<void> setOwnerAccountSuffix(String? digits) =>
-      _set(_ownerAccountKey, digits ?? '');
 
   /// When the last successful cloud backup completed, or null if never.
   ///

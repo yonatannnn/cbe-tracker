@@ -152,26 +152,6 @@ void main() {
     expect(ai.callCount, 0);
   });
 
-  test('the account suffix settles a CBE app receipt locally', () async {
-    const receipt =
-        'ETB 1,000.00 has been debited from Getu Tolosa Tola ETB-4351 for '
-        'Sosina Tilahun Getachew ETB-7737 on Sep 15, 2026 03:38 PM with '
-        'transaction ID: FT26258GYG1C. Reason: MB Transfer';
-    final ai = _FakeAi(null);
-    final pipeline = ParsePipeline(
-      ocr: _FakeOcr(receipt),
-      ai: ai,
-      ownerAccountSuffix: () => '7737',
-    );
-
-    final outcome = await pipeline.parse(image);
-
-    final parsed = (outcome as ParseSuccess).parsed;
-    expect(parsed.type, TxType.credit);
-    expect(parsed.confidence, Confidence.high);
-    expect(ai.callCount, 0);
-  });
-
   test('ParseException + AI null (offline) → Unreadable', () async {
     final ai = _FakeAi(null);
     final pipeline = ParsePipeline(ocr: _FakeOcr(unparseableText), ai: ai);

@@ -12,11 +12,9 @@
 ///    confidence (she checks the row).
 ///  * A CBE app receipt ("ETB 1,000.00 has been debited from A ETB-4351 for
 ///    B ETB-7737") and a CBE USSD confirmation ("Completed ETB300.61 transfer
-///    From A to B-7737") are the SENDER's screen. Her account suffix
-///    (Settings → "My CBE account ends with") confirms it: receiver matches →
-///    credit at HIGH confidence; anything else (her own account as sender, or
-///    no suffix set) → credit at LOW confidence, for her to look at. The app
-///    has no "money out": every filed receipt is a payment in.
+///    From A to B-7737") are the customer's screen of a transfer to her:
+///    a credit. She files only customers' receipts, never her own transfers,
+///    and the app has no "money out".
 ///  * Her own CBE SMS ("your Account … has been Credited/Debited", "You have
 ///    received", "A debit transaction of", "You have successfully
 ///    transferred") keep the original parser and its keyword rules.
@@ -30,16 +28,12 @@ import 'cbe_parser.dart';
 /// Parses any supported receipt or SMS text. Tries the bank templates first,
 /// then falls back to the CBE SMS parser; throws [ParseException] when none
 /// finds an amount.
-///
-/// [ownerAccountSuffix] is the last digits of the user's CBE account (as
-/// printed on receipts: "ETB-7737" / "…-7737" → "7737"), or null when not set.
-ParsedCbeMessage parseReceiptText(String raw, {String? ownerAccountSuffix}) {
+ParsedCbeMessage parseReceiptText(String raw) {
   final text = normalizeCbeText(raw);
   if (text.isEmpty) throw ParseException('Empty message');
 
-  final suffix = _cleanSuffix(ownerAccountSuffix);
   for (final template in _templates) {
-    final parsed = template(text, suffix);
+    final parsed = template(text);
     if (parsed != null) return parsed;
   }
   return parseCbeText(raw);
@@ -47,43 +41,16 @@ ParsedCbeMessage parseReceiptText(String raw, {String? ownerAccountSuffix}) {
 
 /// The templates, most specific first. Each returns null when its markers are
 /// absent, so an unrelated text falls through untouched.
-final List<ParsedCbeMessage? Function(String text, String? suffix)> _templates =
-    [
-      _cbeAppReceipt,
-      _cbeUssdConfirmation,
-      _telebirrSms,
-      _telebirrAppReceipt,
-      _transferSuccessSms, // before Awash: its link says "awashbank"
-      _awashReceipt,
-      _boaReceipt,
-      _dashenReceipt,
-    ];
-
-String? _cleanSuffix(String? raw) {
-  if (raw == null) return null;
-  final digits = raw.replaceAll(RegExp(r'\D'), '');
-  return digits.isEmpty ? null : digits;
-}
-
-/// Whether an account fragment printed on a receipt ("ETB-7737",
-/// "1000563647737", "1****9702") ends with the user's suffix.
-bool _endsWithSuffix(String? printed, String? suffix) {
-  if (printed == null || suffix == null) return false;
-  final digits = printed.replaceAll(RegExp(r'\D'), '');
-  return digits.length >= suffix.length && digits.endsWith(suffix);
-}
-
-/// Whether a sender's-screen CBE receipt is confirmed as a payment INTO her
-/// account. Null when the suffix settles nothing — including when her own
-/// account is the sender, which is not a customer payment and gets reviewed.
-TxType? _directionBySuffix({
-  required String? senderAccount,
-  required String? receiverAccount,
-  required String? suffix,
-}) {
-  if (_endsWithSuffix(receiverAccount, suffix)) return TxType.credit;
-  return null;
-}
+final List<ParsedCbeMessage? Function(String text)> _templates = [
+  _cbeAppReceipt,
+  _cbeUssdConfirmation,
+  _telebirrSms,
+  _telebirrAppReceipt,
+  _transferSuccessSms, // before Awash: its link says "awashbank"
+  _awashReceipt,
+  _boaReceipt,
+  _dashenReceipt,
+];
 
 String _clean(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim();
 
@@ -132,33 +99,24 @@ final _cbeAppRe = RegExp(
   caseSensitive: false,
 );
 
-ParsedCbeMessage? _cbeAppReceipt(String text, String? suffix) {
+ParsedCbeMessage? _cbeAppReceipt(String text) {
   final m = _cbeAppRe.firstMatch(text);
   if (m == null) return null;
   final cents = _cents(m.group(1)!);
   if (cents == null) return null;
   final sender = _clean(m.group(2)!);
-  final senderAccount = m.group(3);
   final receiver = _clean(m.group(4)!);
-  final receiverAccount = m.group(5);
   final date = parseReceiptDate(m.group(6)!);
-  final direction = _directionBySuffix(
-    senderAccount: senderAccount,
-    receiverAccount: receiverAccount,
-    suffix: suffix,
-  );
-  final type = direction ?? TxType.credit;
   return ParsedCbeMessage(
     amountCents: cents,
-    type: type,
+    type: TxType.credit,
     reference: m.group(7)!.toUpperCase(),
     date: date,
-    confidence: direction == null || date == null
-        ? Confidence.low
-        : Confidence.high,
+    confidence: date == null ? Confidence.low : Confidence.high,
     rawText: text,
     bank: 'CBE',
-    counterparty: type == TxType.credit ? sender : receiver,
+    counterparty: sender,
+    recipient: receiver,
   );
 }
 
@@ -176,14 +134,13 @@ final _ussdDateRe = RegExp(
 );
 final _ftRe = RegExp(r'\bFT\w{10}\b');
 
-ParsedCbeMessage? _cbeUssdConfirmation(String text, String? suffix) {
+ParsedCbeMessage? _cbeUssdConfirmation(String text) {
   final m = _cbeUssdRe.firstMatch(text);
   if (m == null) return null;
   final cents = _cents(m.group(1)!);
   if (cents == null) return null;
   final sender = _clean(m.group(2)!);
   final receiver = _clean(m.group(3)!);
-  final receiverAccount = m.group(4);
   final dateMatch = _ussdDateRe.firstMatch(text);
   final date = dateMatch == null
       ? null
@@ -191,24 +148,18 @@ ParsedCbeMessage? _cbeUssdConfirmation(String text, String? suffix) {
           '${dateMatch.group(1)} ${dateMatch.group(2) ?? ''}'.trim(),
         );
   final reference = _ftRe.firstMatch(text)?.group(0)?.toUpperCase();
-  // The USSD text shows only the receiver's suffix.
-  final direction = _directionBySuffix(
-    senderAccount: null,
-    receiverAccount: receiverAccount,
-    suffix: suffix,
-  );
-  final type = direction ?? TxType.credit;
   return ParsedCbeMessage(
     amountCents: cents,
-    type: type,
+    type: TxType.credit,
     reference: reference,
     date: date,
-    confidence: direction == null || reference == null || date == null
+    confidence: reference == null || date == null
         ? Confidence.low
         : Confidence.high,
     rawText: text,
     bank: 'CBE',
-    counterparty: type == TxType.credit ? sender : receiver,
+    counterparty: sender,
+    recipient: receiver,
   );
 }
 
@@ -232,7 +183,7 @@ final _telebirrSmsDateRe = RegExp(
   r'\bon\s+(\d{1,2}/\d{1,2}/\d{4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?',
 );
 
-ParsedCbeMessage? _telebirrSms(String text, String? suffix) {
+ParsedCbeMessage? _telebirrSms(String text) {
   final m = _telebirrSmsRe.firstMatch(text);
   if (m == null) return null;
   final ref = _telebirrRefRe.firstMatch(text)?.group(1)?.toUpperCase();
@@ -292,7 +243,7 @@ String? _telebirrReceiver(String text) =>
         ?.group(1)
         .let(_clean);
 
-ParsedCbeMessage? _telebirrAppReceipt(String text, String? suffix) {
+ParsedCbeMessage? _telebirrAppReceipt(String text) {
   if (!_telebirrAppMarkerRe.hasMatch(text)) return null;
   final time = _telebirrAppTimeRe.firstMatch(text);
   final amount = _telebirrAppAmountRe.firstMatch(text);
@@ -348,7 +299,7 @@ final _awashSenderRe = RegExp(
   '\\d\\s*ETB\\b.*?\\b($_notNameWord[A-Z]{3,}(?:\\s+$_notNameWord[A-Z]{2,}){1,4})\\b',
 );
 
-ParsedCbeMessage? _awashReceipt(String text, String? suffix) {
+ParsedCbeMessage? _awashReceipt(String text) {
   if (!_awashMarkerRe.hasMatch(text)) return null;
   final amount = _awashAmountRe.firstMatch(text);
   if (amount == null) return null;
@@ -398,7 +349,7 @@ final _boaDateRe = RegExp(
   r'\b(\d{1,2}/\d{1,2}/\d{4},?\s*\d{1,2}:\d{2}(?::\d{2})?)\b',
 );
 
-ParsedCbeMessage? _boaReceipt(String text, String? suffix) {
+ParsedCbeMessage? _boaReceipt(String text) {
   if (!_boaMarkerRe.hasMatch(text)) return null;
   final amount = _boaAmountRe.firstMatch(text);
   final ref = _boaRefRe.firstMatch(text);
@@ -443,7 +394,7 @@ final _dashenReceiverRe = RegExp(
   caseSensitive: false,
 );
 
-ParsedCbeMessage? _dashenReceipt(String text, String? suffix) {
+ParsedCbeMessage? _dashenReceipt(String text) {
   final ref = _dashenRefRe.firstMatch(text);
   final amount = _dashenAmountRe.firstMatch(text);
   if (ref == null || amount == null) return null;
@@ -488,7 +439,7 @@ final _zemenLinkRe = RegExp(
   caseSensitive: false,
 );
 
-ParsedCbeMessage? _transferSuccessSms(String text, String? suffix) {
+ParsedCbeMessage? _transferSuccessSms(String text) {
   final m = _transferSmsRe.firstMatch(text);
   if (m == null) return null;
   final cents = _cents(m.group(1)!);

@@ -26,17 +26,10 @@ final aiFallbackProvider = Provider<CbeAiFallback>(
   (ref) => GeminiFallbackService(),
 );
 
-/// Her CBE account's last digits, live (Settings). Null until she sets it.
-final ownerAccountSuffixProvider = StreamProvider<String?>(
-  (ref) => ref.watch(settingsDaoProvider).watchOwnerAccountSuffix(),
-);
-
 final parsePipelineProvider = Provider<ParsePipeline>(
   (ref) => ParsePipeline(
     ocr: ref.watch(ocrServiceProvider),
     ai: ref.watch(aiFallbackProvider),
-    ownerAccountSuffix: () =>
-        ref.read(settingsDaoProvider).getOwnerAccountSuffix(),
   ),
 );
 

@@ -53,8 +53,8 @@ single-client build.
 
 The local parser knows her CBE SMS plus the CBE app and USSD confirmations
 and the receipts customers send from telebirr, Awash, Bank of Abyssinia,
-Dashen and Zemen (REQUIREMENTS.md §4a). Set "My CBE account ends with" in
-Settings so a CBE app receipt can tell money in from money out.
+Dashen and Zemen (REQUIREMENTS.md §4a). Every receipt is a customer's
+payment in; the app has no money-out side.
 
 Both single and bulk screenshot uploads try the local regex parser first.
 Only a failed or low-confidence parse goes to Gemini, and that request

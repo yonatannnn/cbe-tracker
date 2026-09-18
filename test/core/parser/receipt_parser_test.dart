@@ -7,8 +7,6 @@ import 'package:cbe_tracker/core/parser/receipt_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const owner = '7737'; // her CBE account ends with these digits
-
   group('CBE app transfer receipt (purple "Thank you" screen)', () {
     const raw =
         'Thank you Success Transaction Completed Successfully! Transaction '
@@ -20,7 +18,7 @@ void main() {
         'Commercial Bank of Ethiopia';
 
     test('a customer paying her → credit, HIGH, fees excluded', () {
-      final p = parseReceiptText(raw, ownerAccountSuffix: owner);
+      final p = parseReceiptText(raw);
       expect(p.amountCents, 100000, reason: 'not the 1000.61 total');
       expect(p.type, TxType.credit);
       expect(p.reference, 'FT26258GYG1C');
@@ -28,32 +26,7 @@ void main() {
       expect(p.confidence, Confidence.high);
       expect(p.bank, 'CBE');
       expect(p.counterparty, 'Getu Tolosa Tola');
-    });
-
-    test('her own account as the SENDER is not a customer payment → LOW', () {
-      // The app has no money-out; a receipt she sent herself comes back for
-      // her to look at rather than being filed as a payment in.
-      final p = parseReceiptText(raw, ownerAccountSuffix: '4351');
-      expect(p.type, TxType.credit);
-      expect(p.confidence, Confidence.low);
-    });
-
-    test('no account suffix set → credit, LOW (she checks)', () {
-      final p = parseReceiptText(raw);
-      expect(p.type, TxType.credit);
-      expect(p.confidence, Confidence.low);
-      expect(p.amountCents, 100000);
-    });
-
-    test('a suffix matching neither side → LOW', () {
-      final p = parseReceiptText(raw, ownerAccountSuffix: '0000');
-      expect(p.confidence, Confidence.low);
-    });
-
-    test('the suffix may be typed with the ETB- prefix', () {
-      final p = parseReceiptText(raw, ownerAccountSuffix: 'ETB-7737');
-      expect(p.type, TxType.credit);
-      expect(p.confidence, Confidence.high);
+      expect(p.recipient, 'Sosina Tilahun Getachew');
     });
   });
 
@@ -64,17 +37,14 @@ void main() {
         'Charge #:Next';
 
     test('customer → her: credit with the FT reference and the day', () {
-      final p = parseReceiptText(raw, ownerAccountSuffix: owner);
+      final p = parseReceiptText(raw);
       expect(p.amountCents, 30061);
       expect(p.type, TxType.credit);
       expect(p.reference, 'FT26259194Y1');
       expect(p.date, DateTime(2026, 9, 16));
       expect(p.confidence, Confidence.high);
       expect(p.counterparty, 'Mastewal Molla Aynalem');
-    });
-
-    test('unknown suffix → LOW', () {
-      expect(parseReceiptText(raw).confidence, Confidence.low);
+      expect(p.recipient, 'Sosina Tilahun Getachew');
     });
   });
 
@@ -313,7 +283,7 @@ void main() {
           '1 Completed ETB300,61 transfer From Mastewal Molla Aynalem to '
           'Sosina Tilahun Getachew-7737. To kgý on 16/09/2026 FT26259194Y1 '
           'Service Charge #Next 1#1 GHL W Cancel JKL 23 4 5 678 9 9 Send';
-      final p = parseReceiptText(ocr, ownerAccountSuffix: owner);
+      final p = parseReceiptText(ocr);
       expect(p.amountCents, 30061, reason: '300,61 is 300.61, not 30,061');
       expect(p.type, TxType.credit);
       expect(p.reference, 'FT26259194Y1');
@@ -329,7 +299,7 @@ void main() {
           'Debited: ETB1000.61 with Service Charge of ETBO.50, VAT (15%) of '
           'ETBO.08 and Disaster Recovery (5%) of ETBO.03. Commercial Bank of '
           'Ethiopia';
-      final p = parseReceiptText(ocr, ownerAccountSuffix: owner);
+      final p = parseReceiptText(ocr);
       expect(p.amountCents, 100000);
       expect(p.type, TxType.credit);
       expect(p.confidence, Confidence.high);
@@ -343,7 +313,7 @@ void main() {
           '5,000.00 from ABEBE KEBEDE on 14/07/2026 at 10:42. Your Current '
           'Balance is ETB 145,200.00. Thank you for Banking with CBE! '
           'https://apps.cbe.com.et:100/?id=FT26195XKQ8T12341234';
-      final p = parseReceiptText(raw, ownerAccountSuffix: owner);
+      final p = parseReceiptText(raw);
       expect(p.amountCents, 500000);
       expect(p.type, TxType.credit);
       expect(p.reference, 'FT26195XKQ8T');
