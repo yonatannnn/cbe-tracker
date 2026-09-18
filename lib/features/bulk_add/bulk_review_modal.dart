@@ -335,6 +335,9 @@ class _ReviewRowTile extends StatelessWidget {
   final ValueChanged<TxType> onType;
   final ValueChanged<String> onReference;
 
+  // Every row uses the same frame — [leading 48] [thumb] [body] [trailing 48]
+  // — so the eye runs down one column of amounts whatever each row's state.
+
   @override
   Widget build(BuildContext context) {
     return switch (row.status) {
@@ -344,82 +347,128 @@ class _ReviewRowTile extends StatelessWidget {
     };
   }
 
-  // ok + okAiParsed
+  Widget _frame({
+    required Widget leading,
+    required List<Widget> body,
+    Widget? trailing,
+    Color? background,
+  }) {
+    return Container(
+      color: background,
+      padding: const EdgeInsets.fromLTRB(0, 12, 8, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 48,
+            height: _Thumb.height,
+            child: Center(child: leading),
+          ),
+          _Thumb(image: row.item.image),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: body,
+            ),
+          ),
+          SizedBox(
+            width: 40,
+            height: _Thumb.height,
+            child: trailing == null ? null : Center(child: trailing),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// "#3 · FT26258GYG1C" in mono, the same on every row.
+  Widget _refLine(BuildContext context, String? reference) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      // A derived reference (AWASH-20260917152803-450000) is long; shrink it
+      // a little rather than cut off the part that makes it unique.
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '#$number · ${reference ?? 'No reference'}',
+            maxLines: 1,
+            style: AppTextStyles.mono.copyWith(
+              fontSize: 12,
+              color: theme.colorScheme.outline,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _noteLine(BuildContext context, String text, {Color? color}) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text(
+        text,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: color ?? theme.colorScheme.outline,
+          fontWeight: color == null ? FontWeight.w400 : FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  // ok + okAiParsed (a model reading, or a local read with a gap)
   Widget _buildParsed(BuildContext context) {
     final theme = Theme.of(context);
-    final isAi = row.status == BulkStatus.okAiParsed;
+    final needsCheck = row.status == BulkStatus.okAiParsed;
     final cents = row.effectiveCents ?? 0;
     final type = row.effectiveType ?? TxType.credit;
     final isCredit = type == TxType.credit;
     final signed = isCredit ? cents : -cents;
+    final origin = _origin(row.item.parsed);
 
     return Column(
       children: [
-        Row(
-          children: [
-            Checkbox(
-              value: row.checked,
-              onChanged: (v) => onToggle(v ?? false),
-            ),
-            // An AI reading is checked against the picture, so show it.
-            if (isAi) ...[
-              _Thumb(image: row.item.image),
-              const SizedBox(width: 10),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        formatSignedCents(signed),
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                          color: isCredit
-                              ? AppColors.credit
-                              : theme.colorScheme.error,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _TypeBadge(isCredit: isCredit),
-                      if (isAi) ...[
-                        const SizedBox(width: 6),
-                        _AiBadge(
-                          local: row.item.parsed?.confidence == Confidence.low,
-                        ),
-                      ],
-                    ],
+        _frame(
+          leading: Checkbox(
+            value: row.checked,
+            onChanged: (v) => onToggle(v ?? false),
+          ),
+          body: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  formatSignedCents(signed),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: isCredit ? AppColors.credit : AppColors.debit,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '#$number · ${row.item.parsed?.reference ?? 'No reference'}',
-                    style: AppTextStyles.mono.copyWith(
-                      fontSize: 12,
-                      color: theme.colorScheme.outline,
-                    ),
+                ),
+                _TypeBadge(isCredit: isCredit),
+                if (needsCheck)
+                  _AiBadge(
+                    local: row.item.parsed?.confidence == Confidence.low,
                   ),
-                  if (_origin(row.item.parsed) case final origin?)
-                    Text(
-                      origin,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
-            // Edit only on low-confidence rows (§FR-3) — a clean parse is
-            // read-only.
-            if (row.isEditable)
-              IconButton(
-                icon: Icon(row.expanded ? Icons.expand_less : Icons.edit),
-                tooltip: 'Edit',
-                onPressed: () => onExpand(!row.expanded),
-              )
-            else
-              const SizedBox(width: 48),
+            _refLine(context, row.item.parsed?.reference),
+            if (origin != null) _noteLine(context, origin),
           ],
+          // Edit only on rows that need checking (§FR-3) — a clean parse is
+          // read-only.
+          trailing: row.isEditable
+              ? IconButton(
+                  icon: Icon(row.expanded ? Icons.expand_less : Icons.edit),
+                  tooltip: 'Edit',
+                  onPressed: () => onExpand(!row.expanded),
+                )
+              : null,
         ),
         if (row.expanded) _buildEditor(context),
       ],
@@ -446,56 +495,30 @@ class _ReviewRowTile extends StatelessWidget {
       reason = 'Already saved before';
     }
 
-    return Container(
-      color: AppColors.pendingWash.withValues(alpha: 0.5),
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          // No checkbox at all — a duplicate can never be saved.
-          const SizedBox(width: 48),
-          _Thumb(image: row.item.image),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      formatSignedCents(isCredit ? cents : -cents),
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: theme.colorScheme.outline,
-                        decoration: TextDecoration.lineThrough,
-                      ),
-                    ),
-                    const _NotSavedBadge(),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  reason,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.pending,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  '#$number · ${row.item.parsed?.reference ?? ''}',
-                  style: AppTextStyles.mono.copyWith(
-                    fontSize: 12,
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-              ],
+    return _frame(
+      background: AppColors.pendingWash.withValues(alpha: 0.5),
+      // No checkbox at all — a duplicate can never be saved.
+      leading: const Icon(Icons.block, size: 18, color: AppColors.pending),
+      body: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              formatSignedCents(isCredit ? cents : -cents),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.outline,
+                decoration: TextDecoration.lineThrough,
+              ),
             ),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
+            const _NotSavedBadge(),
+          ],
+        ),
+        _refLine(context, row.item.parsed?.reference),
+        _noteLine(context, reason, color: AppColors.pending),
+      ],
     );
   }
 
@@ -503,38 +526,43 @@ class _ReviewRowTile extends StatelessWidget {
     final theme = Theme.of(context);
     return Column(
       children: [
-        Row(
-          children: [
-            SizedBox(
-              width: 48,
-              child: row.checked
-                  ? Checkbox(
-                      value: row.checked,
-                      onChanged: (v) => onToggle(v ?? false),
-                    )
-                  : const SizedBox.shrink(),
+        _frame(
+          // A filled-in failed row grows a checkbox; until then nothing.
+          leading: row.checked
+              ? Checkbox(
+                  value: row.checked,
+                  onChanged: (v) => onToggle(v ?? false),
+                )
+              : const SizedBox.shrink(),
+          body: [
+            Text(
+              unreadableMessage(row.item.aiFailure),
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            _Thumb(image: row.item.image),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '#$number · ${unreadableMessage(row.item.aiFailure)}',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
+            _refLine(context, null),
+            if (!row.expanded)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () => onExpand(true),
+                  child: const Text('Add manually'),
                 ),
               ),
-            ),
-            if (!row.expanded)
-              TextButton(
-                onPressed: () => onExpand(true),
-                child: const Text('Add manually'),
-              )
-            else
-              IconButton(
-                icon: const Icon(Icons.expand_less),
-                onPressed: () => onExpand(false),
-              ),
           ],
+          trailing: row.expanded
+              ? IconButton(
+                  icon: const Icon(Icons.expand_less),
+                  onPressed: () => onExpand(false),
+                )
+              : null,
         ),
         if (row.expanded) _buildEditor(context),
       ],
@@ -543,7 +571,7 @@ class _ReviewRowTile extends StatelessWidget {
 
   Widget _buildEditor(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(48, 4, 16, 16),
+      padding: const EdgeInsets.fromLTRB(48, 0, 16, 16),
       child: ManualEntryFields(
         dense: true,
         initialCents: row.effectiveCents,
@@ -556,7 +584,7 @@ class _ReviewRowTile extends StatelessWidget {
     );
   }
 
-  /// "Awash Bank · from ESRAEL TOLOSA TOLA" — only the AI path knows these.
+  /// "Awash Bank · from ESRAEL TOLOSA TOLA" — bank and payer when known.
   static String? _origin(ParsedCbeMessage? parsed) {
     if (parsed == null) return null;
     final who = parsed.counterparty;
@@ -711,6 +739,7 @@ class _SumPanel extends StatelessWidget {
                   color: AppColors.credit,
                 ),
               ),
+              const SizedBox(width: 12),
               Expanded(
                 child: _SumCell(
                   label: 'OUT',
@@ -718,6 +747,7 @@ class _SumPanel extends StatelessWidget {
                   color: AppColors.debit,
                 ),
               ),
+              const SizedBox(width: 12),
               Expanded(
                 child: _SumCell(
                   label: 'NET',
@@ -728,7 +758,7 @@ class _SumPanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             state.checkedCount == 0
                 ? 'Nothing selected'
@@ -766,15 +796,29 @@ class _SumCell extends StatelessWidget {
       children: [
         Text(label, style: AppTextStyles.label),
         const SizedBox(height: 2),
-        Text(value, style: AppTextStyles.moneyRow.copyWith(color: color)),
+        // A six-figure sum must shrink to fit its third, never run into the
+        // next cell or wrap onto a second line.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+          child: Text(
+            value,
+            maxLines: 1,
+            style: AppTextStyles.moneyRow.copyWith(color: color),
+          ),
+        ),
       ],
     );
   }
 }
 
-/// Small evidence thumbnail for rows she may need to recognise by eye.
+/// The receipt itself, portrait, on every row — the thing she checks a
+/// figure against, and what makes "same receipt as #1" recognisable.
 class _Thumb extends StatelessWidget {
   const _Thumb({required this.image});
+
+  static const double width = 44;
+  static const double height = 56;
 
   final File image;
 
@@ -785,13 +829,13 @@ class _Thumb extends StatelessWidget {
       borderRadius: BorderRadius.circular(6),
       child: Image.file(
         image,
-        width: 40,
-        height: 40,
+        width: width,
+        height: height,
         fit: BoxFit.cover,
-        cacheWidth: 120,
+        cacheWidth: 132,
         errorBuilder: (context, _, _) => Container(
-          width: 40,
-          height: 40,
+          width: width,
+          height: height,
           color: theme.colorScheme.surfaceContainerHighest,
           child: const Icon(Icons.broken_image_outlined, size: 18),
         ),
