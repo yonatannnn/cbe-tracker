@@ -12,6 +12,7 @@ import '../../core/money/etb_format.dart';
 import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../services/service_providers.dart';
+import '../../services/sync_actions.dart';
 import '../shared/manual_entry_fields.dart';
 import 'branch_detail_providers.dart';
 
@@ -110,6 +111,9 @@ class _BodyState extends ConsumerState<_Body> {
     }
 
     ref.read(transactionRevisionProvider.notifier).bump();
+    // The reference may have changed: mirror the new row and drop the old.
+    if (_reference.trim() != _tx.reference) ref.cloudDeleteTransaction(_tx);
+    ref.cloudSyncTransactions([_reference.trim()]);
     if (!mounted) return;
     setState(() {
       _editing = false;
@@ -143,6 +147,7 @@ class _BodyState extends ConsumerState<_Body> {
     if (!(confirmed ?? false) || !mounted) return;
 
     await ref.read(transactionDaoProvider).deleteTransaction(_tx.id);
+    ref.cloudDeleteTransaction(_tx);
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,

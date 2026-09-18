@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme.dart';
 import '../../data/db/database_provider.dart';
 import '../../data/profiles/profile_provider.dart';
+import '../../services/service_providers.dart';
 import '../../services/notification_service.dart';
 import '../../services/supabase_config.dart';
 import '../reports/reports_providers.dart';
@@ -105,6 +106,31 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            // The Firestore mirror. Hidden entirely in a build without Firebase
+            // config; otherwise one line of status and a Sync now.
+            if (ref.watch(firebaseSyncProvider) != null) ...[
+              const Divider(),
+              const _SectionHeader('Cloud'),
+              ListTile(
+                leading: const Icon(Icons.cloud_done_outlined),
+                title: const Text('Saved to the cloud on approve'),
+                subtitle: Text(
+                  me == null
+                      ? 'Nobody signed in'
+                      : 'Under your name, ${me.name}: branches, then their '
+                            'transactions',
+                ),
+              ),
+              ListTile(
+                leading: const SizedBox(width: 24),
+                title: const Text('Sync everything now'),
+                subtitle: const Text(
+                  'Pushes every branch and transaction again',
+                ),
+                trailing: const Icon(Icons.sync),
+                onTap: () => _syncAll(context, ref),
+              ),
+            ],
             const Divider(),
             const _SectionHeader('Backup'),
             const BackupSection(),
@@ -131,6 +157,25 @@ class SettingsScreen extends ConsumerWidget {
   ) async {
     await ref.read(profilesProvider.notifier).switchTo(id);
     if (context.mounted) context.go('/home');
+  }
+
+  Future<void> _syncAll(BuildContext context, WidgetRef ref) async {
+    final sync = ref.read(firebaseSyncProvider);
+    final profile = ref.read(activeProfileProvider);
+    if (sync == null || profile == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Syncing…')));
+    final ok = await sync.syncAll(profile, ref.read(appDatabaseProvider));
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Everything is in the cloud under ${profile.name}'
+              : "Couldn't reach the cloud — it will retry on the next save",
+        ),
+      ),
+    );
   }
 
   /// Nobody signed in → the router's first gate shows the welcome screen.

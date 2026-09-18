@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/db/database_provider.dart';
 import '../../data/profiles/profile_provider.dart';
+import '../../services/sync_actions.dart';
 
 /// Shown when there are zero branches. Branches are written straight to the
 /// database as they're added, so "first run" stays derived from the count.
@@ -29,7 +30,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _add() async {
     final name = _controller.text.trim();
     if (name.isEmpty) return;
-    await ref.read(branchDaoProvider).createBranch(name);
+    final id = await ref.read(branchDaoProvider).createBranch(name);
+    ref.cloudSyncBranch(id);
     _controller.clear();
   }
 
@@ -100,9 +102,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             for (final branch in added)
                               InputChip(
                                 label: Text(branch.name),
-                                onDeleted: () => ref
-                                    .read(branchDaoProvider)
-                                    .deleteBranch(branch.id),
+                                onDeleted: () async {
+                                  await ref
+                                      .read(branchDaoProvider)
+                                      .deleteBranch(branch.id);
+                                  ref.cloudDeleteBranch(branch.id);
+                                },
                               ),
                           ],
                         ),

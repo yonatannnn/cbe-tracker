@@ -21,6 +21,7 @@ import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
 import '../../services/parse_pipeline.dart';
 import '../../services/service_providers.dart';
+import '../../services/sync_actions.dart';
 import '../shared/branch_chips.dart';
 import '../shared/manual_entry_fields.dart';
 
@@ -163,6 +164,10 @@ class _AddSingleScreenState extends ConsumerState<AddSingleScreen> {
         ocrText: Value(parsed?.rawText ?? _rawText()),
       ),
     );
+    if (result == InsertResult.inserted) {
+      ref.cloudSyncBranch(branchId);
+      ref.cloudSyncTransactions([entry.reference]);
+    }
 
     if (result == InsertResult.duplicate) {
       // The image was copied to durable storage before the insert, and a

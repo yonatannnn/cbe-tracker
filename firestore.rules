@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Books are filed by the user's NAME, not by device, so any signed-in
+    // (anonymous) install of the app may read and write them. This is what
+    // lets a reinstall or a second phone typing the same name see the same
+    // branches. It also means anyone with the app can reach any name — fine
+    // for a private single-client build, not for a public one.
+    match /users/{userKey}/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

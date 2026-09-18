@@ -16,6 +16,7 @@ import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
 import '../../services/bulk_processor.dart';
 import '../../services/parse_pipeline.dart' show unreadableMessage;
+import '../../services/sync_actions.dart';
 import '../../services/service_providers.dart';
 import '../shared/manual_entry_fields.dart';
 import 'bulk_review_state.dart';
@@ -140,6 +141,9 @@ class _BulkReviewModalState extends ConsumerState<BulkReviewModal> {
     // "nothing was saved" — that sentence on top of ten saved transactions
     // would send her to save them again, and every reference would then collide
     // as a duplicate, trapping her in a modal insisting nothing had saved.
+    // Mirror to the cloud in the background (users/{name}/branches/…).
+    ref.cloudSyncBranch(widget.branchId);
+    ref.cloudSyncTransactions(entries.map((e) => e.reference.value));
     try {
       await ref.read(settingsDaoProvider).setLastBranchId(widget.branchId);
     } on Object {

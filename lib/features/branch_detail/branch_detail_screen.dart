@@ -11,6 +11,7 @@ import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
 import '../../data/db/tables.dart';
 import '../../services/service_providers.dart';
+import '../../services/sync_actions.dart';
 import 'branch_detail_providers.dart';
 import 'day_grouping.dart';
 
@@ -93,6 +94,7 @@ class BranchDetailScreen extends ConsumerWidget {
     controller.dispose();
     if (name == null || name.isEmpty || name == branch.name) return;
     await ref.read(branchDaoProvider).renameBranch(branch.id, name);
+    ref.cloudSyncBranch(branch.id);
   }
 
   Future<void> _archive(
@@ -121,6 +123,7 @@ class BranchDetailScreen extends ConsumerWidget {
     );
     if (!(confirmed ?? false) || !context.mounted) return;
     await ref.read(branchDaoProvider).archiveBranch(branch.id);
+    ref.cloudSyncBranch(branch.id);
     if (context.mounted && context.canPop()) context.pop();
   }
 }

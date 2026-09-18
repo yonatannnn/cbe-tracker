@@ -1,6 +1,8 @@
 /// Riverpod wiring for the OCR / AI / pipeline services (§6).
 library;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,6 +10,7 @@ import '../data/db/database_provider.dart';
 import '../data/profiles/profile_provider.dart';
 import 'backup_service.dart';
 import 'cloud_backup_service.dart';
+import 'firebase_sync_service.dart';
 import 'gemini_fallback_service.dart';
 import 'image_store.dart';
 import 'ocr_service.dart';
@@ -70,6 +73,16 @@ final cloudBackupServiceProvider = Provider<CloudBackupService?>((ref) {
     backend: backend,
     backup: ref.watch(backupServiceProvider),
     settings: ref.watch(settingsDaoProvider),
+  );
+});
+
+/// The Firestore mirror, or null when this build carries no Firebase config.
+/// The UI hides its section and every hook no-ops on null.
+final firebaseSyncProvider = Provider<FirebaseSyncService?>((ref) {
+  if (!FirebaseSyncService.isAvailable) return null;
+  return FirebaseSyncService(
+    firestore: FirebaseFirestore.instance,
+    auth: FirebaseAuth.instance,
   );
 });
 

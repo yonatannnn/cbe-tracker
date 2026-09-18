@@ -61,6 +61,9 @@ dependencies:
   # Dormant unless SUPABASE_URL/SUPABASE_KEY are passed at build time, so a
   # plain build stays fully local. Verified `flutter build apk` compiles clean.
   supabase_flutter: ^2.16.0
+  firebase_core: ^4.15.0
+  cloud_firestore: ^6.10.0
+  firebase_auth: ^6.7.0
 
 dev_dependencies:
   flutter_test:

@@ -14,6 +14,7 @@ import '../../app/theme.dart';
 import '../../core/money/etb_format.dart';
 import '../../data/db/database.dart';
 import '../../data/db/database_provider.dart';
+import '../../services/sync_actions.dart';
 
 class BranchesScreen extends ConsumerStatefulWidget {
   const BranchesScreen({super.key});
@@ -34,7 +35,8 @@ class _BranchesScreenState extends ConsumerState<BranchesScreen> {
   Future<void> _add() async {
     final name = _controller.text.trim();
     if (name.isEmpty) return;
-    await ref.read(branchDaoProvider).createBranch(name);
+    final id = await ref.read(branchDaoProvider).createBranch(name);
+    ref.cloudSyncBranch(id);
     _controller.clear();
   }
 
@@ -46,6 +48,7 @@ class _BranchesScreenState extends ConsumerState<BranchesScreen> {
     );
     if (name == null || name.isEmpty || name == branch.name) return;
     await ref.read(branchDaoProvider).renameBranch(branch.id, name);
+    ref.cloudSyncBranch(branch.id);
   }
 
   /// Tries a hard delete first. The DAO throws when the branch has any
@@ -55,6 +58,7 @@ class _BranchesScreenState extends ConsumerState<BranchesScreen> {
     final dao = ref.read(branchDaoProvider);
     try {
       await dao.deleteBranch(branch.id);
+      ref.cloudDeleteBranch(branch.id);
     } on BranchHasTransactionsException {
       if (!mounted) return;
       final archive = await showDialog<bool>(
@@ -78,7 +82,10 @@ class _BranchesScreenState extends ConsumerState<BranchesScreen> {
           ],
         ),
       );
-      if (archive ?? false) await dao.archiveBranch(branch.id);
+      if (archive ?? false) {
+        await dao.archiveBranch(branch.id);
+        ref.cloudSyncBranch(branch.id);
+      }
     }
   }
 
