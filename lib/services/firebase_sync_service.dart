@@ -76,9 +76,8 @@ class FirebaseSyncService {
   /// every hook is a no-op.
   static bool get isAvailable => Firebase.apps.isNotEmpty;
 
-  /// Best-effort anonymous sign-in. The project's Auth may not be switched
-  /// on yet (it needs one click in the Firebase console); until it is, the
-  /// rules are open and the writes go through unsigned.
+  /// Anonymous sign-in, kept best-effort: the rules require it, so a failed
+  /// sign-in means the write is refused and logged, never a crash.
   Future<void> _signIn() async {
     if (auth.currentUser != null) return;
     try {
