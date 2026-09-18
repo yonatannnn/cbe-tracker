@@ -383,7 +383,12 @@ class _ReviewRowTile extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       _TypeBadge(isCredit: isCredit),
-                      if (isAi) ...[const SizedBox(width: 6), const _AiBadge()],
+                      if (isAi) ...[
+                        const SizedBox(width: 6),
+                        _AiBadge(
+                          local: row.item.parsed?.confidence == Confidence.low,
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -597,7 +602,11 @@ class _TypeBadge extends StatelessWidget {
 }
 
 class _AiBadge extends StatelessWidget {
-  const _AiBadge();
+  const _AiBadge({this.local = false});
+
+  /// A local read with a gap (direction unsettled, reference or date
+  /// missing) rather than a model reading.
+  final bool local;
 
   @override
   Widget build(BuildContext context) {
@@ -607,13 +616,17 @@ class _AiBadge extends StatelessWidget {
         color: AppColors.pendingWash,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.auto_awesome, size: 10, color: AppColors.pending),
-          SizedBox(width: 3),
+          Icon(
+            local ? Icons.help_outline : Icons.auto_awesome,
+            size: 10,
+            color: AppColors.pending,
+          ),
+          const SizedBox(width: 3),
           Text(
-            'AI',
+            local ? 'CHECK' : 'AI',
             style: TextStyle(
               color: AppColors.pending,
               fontSize: 9,

@@ -21,7 +21,8 @@ enum BulkStatus {
   /// Parsed locally with HIGH confidence; reference not already recorded.
   ok,
 
-  /// Parsed via the Gemini fallback — must be user-checked before saving.
+  /// Parsed via the Gemini fallback, or locally with a gap — must be
+  /// user-checked before saving.
   okAiParsed,
 
   /// Reference already exists in transactions, or appeared earlier in this
@@ -176,9 +177,11 @@ class BulkProcessor {
           }
           seen[reference] = position;
         }
-        return parsed.confidence == Confidence.aiParsed
-            ? BulkItem.okAiParsed(image, parsed)
-            : BulkItem.ok(image, parsed);
+        // LOW (a template with a gap, or an unsettled direction) is reviewed
+        // exactly like an AI reading: unchecked, editable, thumbnail shown.
+        return parsed.confidence == Confidence.high
+            ? BulkItem.ok(image, parsed)
+            : BulkItem.okAiParsed(image, parsed);
     }
   }
 }

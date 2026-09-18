@@ -411,7 +411,7 @@ class _SummaryCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (parsed.confidence == Confidence.aiParsed)
+            if (parsed.confidence != Confidence.high)
               const Padding(
                 padding: EdgeInsets.only(bottom: 12),
                 child: _AiBadge(),

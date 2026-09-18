@@ -4,7 +4,10 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
+
 import '../core/parser/cbe_parser.dart';
+import '../core/parser/receipt_parser.dart';
 import 'gemini_fallback_service.dart';
 import 'ocr_service.dart';
 import 'parse_diagnostics.dart';
@@ -55,11 +58,22 @@ String unreadableMessage(AiFailure? failure) => switch (failure) {
   _ => "Couldn't read this picture",
 };
 
+const bool _logOcr = bool.fromEnvironment('LOG_OCR');
+
 class ParsePipeline {
-  ParsePipeline({required this.ocr, required this.ai});
+  ParsePipeline({
+    required this.ocr,
+    required this.ai,
+    FutureOr<String?> Function()? ownerAccountSuffix,
+  }) : _ownerAccountSuffix = ownerAccountSuffix ?? (() => null);
 
   final OcrService ocr;
   final CbeAiFallback ai;
+
+  /// Her CBE account's last digits, for direction on sender's-screen
+  /// receipts (see receipt_parser.dart). Read fresh on every parse — a
+  /// value captured when the pipeline was built could predate her typing it.
+  final FutureOr<String?> Function() _ownerAccountSuffix;
 
   /// Bounds native OCR initialization and image preparation as well as reading.
   static const Duration ocrTimeout = Duration(seconds: 20);
@@ -79,6 +93,12 @@ class ParsePipeline {
       logParseDiagnostic(
         'ocr completed chars=${rawText.length} elapsed_ms=${watch.elapsedMilliseconds}',
       );
+      // Development only: the raw OCR text, for building new receipt
+      // templates. Off unless the build says --dart-define=LOG_OCR=true AND
+      // it is a debug build, so a release can never leak receipt text.
+      if (kDebugMode && _logOcr) {
+        debugPrint('[ReceiptOCR] ${rawText.replaceAll('\n', ' ⏎ ')}');
+      }
     } on Object catch (error) {
       logParseDiagnostic(
         'ocr failed reason=${error is TimeoutException ? 'timeout' : error.runtimeType} '
@@ -103,12 +123,25 @@ class ParsePipeline {
       }
     }
 
+    ParsedCbeMessage? low;
     try {
-      final local = parseCbeText(rawText);
+      final local = parseReceiptText(
+        rawText,
+        ownerAccountSuffix: await _ownerAccountSuffix(),
+      );
       if (local.confidence == Confidence.high) {
         logParseDiagnostic('regex accepted; gemini skipped');
         return ParseSuccess(local);
       }
+      // Read, but with a gap (no reference, no date) or an unsettled
+      // direction. A bank template that reached this far knows the layout
+      // better than the model would; only the CBE keyword parser's LOW
+      // result (a message shape we don't fully know) is worth a model call.
+      if (local.bank != null) {
+        logParseDiagnostic('template low_confidence; for review');
+        return ParseSuccess(local);
+      }
+      low = local;
       logParseDiagnostic('regex low_confidence; trying gemini');
     } on ParseException {
       logParseDiagnostic('regex failed; trying gemini');
@@ -118,6 +151,13 @@ class ParsePipeline {
     // separate connectivity check is needed.
     final aiParsed = await ai.parse(rawText, image: aiImage);
     if (aiParsed != null) return ParseSuccess(aiParsed);
+
+    // The model could not improve on it: a LOW local read beats nothing.
+    // The row is flagged and starts unchecked, so she still looks (§FR-3).
+    if (low != null) {
+      logParseDiagnostic('gemini unavailable; keeping low_confidence read');
+      return ParseSuccess(low);
+    }
 
     logParseDiagnostic('receipt unreadable');
     return ParseUnreadable(rawText, aiFailure: ai.lastFailure);

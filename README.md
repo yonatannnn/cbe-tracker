@@ -48,6 +48,11 @@ Rebuild after changing the key; hot reload cannot update build-time values.
 The key is embedded in the app, so this setup is intended for the personal
 single-client build.
 
+The local parser knows her CBE SMS plus the CBE app and USSD confirmations
+and the receipts customers send from telebirr, Awash, Bank of Abyssinia,
+Dashen and Zemen (REQUIREMENTS.md §4a). Set "My CBE account ends with" in
+Settings so a CBE app receipt can tell money in from money out.
+
 Both single and bulk screenshot uploads try the local regex parser first.
 Only a failed or low-confidence parse goes to Gemini, and that request
 carries the OCR text AND the picture itself — a photo of a phone screen, or a

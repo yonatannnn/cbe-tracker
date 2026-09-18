@@ -120,14 +120,56 @@ void main() {
     expect(ai.callCount, 1);
   });
 
-  test('LOW confidence + AI null → Unreadable (never a guess)', () async {
+  test('LOW confidence + AI null → the LOW read, flagged for review', () async {
+    // A parsed amount and type with a missing reference is not a guess; it is
+    // a real read with a gap. Throwing it away sent her to type the figures
+    // by hand. It comes back LOW, so the row starts unchecked (§FR-3).
     final ai = _FakeAi(null);
     final pipeline = ParsePipeline(ocr: _FakeOcr(lowConfidenceText), ai: ai);
 
     final outcome = await pipeline.parse(image);
 
-    expect(outcome, isA<ParseUnreadable>());
-    expect((outcome as ParseUnreadable).rawText, lowConfidenceText);
+    expect(outcome, isA<ParseSuccess>());
+    expect((outcome as ParseSuccess).parsed.confidence, Confidence.low);
+    expect(ai.callCount, 1, reason: 'the model was still asked first');
+  });
+
+  test('a bank template read with a gap skips the model entirely', () async {
+    // A telebirr "transferred" SMS: amount, reference and date all read, only
+    // the direction unsettled. Nothing a model could add.
+    const telebirr =
+        'Dear Ephrem You have transferred ETB 600.00 to asefa aynalem on '
+        '31/05/2026. Your transaction number is DEV6HKJX7K.';
+    final ai = _FakeAi(null);
+    final pipeline = ParsePipeline(ocr: _FakeOcr(telebirr), ai: ai);
+
+    final outcome = await pipeline.parse(image);
+
+    expect(outcome, isA<ParseSuccess>());
+    final parsed = (outcome as ParseSuccess).parsed;
+    expect(parsed.bank, 'telebirr');
+    expect(parsed.confidence, Confidence.low);
+    expect(ai.callCount, 0);
+  });
+
+  test('the account suffix settles a CBE app receipt locally', () async {
+    const receipt =
+        'ETB 1,000.00 has been debited from Getu Tolosa Tola ETB-4351 for '
+        'Sosina Tilahun Getachew ETB-7737 on Sep 15, 2026 03:38 PM with '
+        'transaction ID: FT26258GYG1C. Reason: MB Transfer';
+    final ai = _FakeAi(null);
+    final pipeline = ParsePipeline(
+      ocr: _FakeOcr(receipt),
+      ai: ai,
+      ownerAccountSuffix: () => '7737',
+    );
+
+    final outcome = await pipeline.parse(image);
+
+    final parsed = (outcome as ParseSuccess).parsed;
+    expect(parsed.type, TxType.credit);
+    expect(parsed.confidence, Confidence.high);
+    expect(ai.callCount, 0);
   });
 
   test('ParseException + AI null (offline) → Unreadable', () async {
